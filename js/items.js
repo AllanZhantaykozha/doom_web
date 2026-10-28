@@ -28,16 +28,18 @@
 
     reset() { this.list = []; },
 
-    spawn(ch, x, y) {
+    // dropped=true — выпавшие из врагов предметы не входят в процент «предметы»
+    spawn(ch, x, y, dropped) {
       const def = DEFS[ch];
       this.list.push({
         x, y, def,
         tex: G.Sprites.items[def.sprite],   // поля x, y, tex, size, z, active — общий интерфейс «рисуемого» для рендера
         size: def.size,
         z: def.z,
+        dropped: !!dropped,
         active: true
       });
-      if (!def.exit) G.Map.itemsTotal++;
+      if (!def.exit && !dropped) G.Map.itemsTotal++;
     },
 
     // Подбор предметов. Вызывается каждый тик. Без аллокаций.
@@ -53,7 +55,7 @@
         const msg = it.def.pickup(G.Player);
         if (msg) {
           it.active = false;
-          G.Map.itemsFound++;
+          if (!it.dropped) G.Map.itemsFound++;
           G.Player.dirty = true;
           G.Player.pickupFlash = 0.6;
           G.Game.message(msg);

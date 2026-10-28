@@ -152,6 +152,7 @@
     executeFire(w) {
       const C = G.CONFIG;
       if (w.ammo !== null) { this.ammo[w.ammo] -= w.cost; this.dirty = true; }
+      if (w.noise) G.Enemies.noise(this.x, this.y, w.noise);   // выстрел будит врагов поблизости
       if (w.kind === 'rocket') {
         G.Projectiles.spawnRocket(this.x + Math.cos(this.angle) * 0.3, this.y + Math.sin(this.angle) * 0.3, this.angle);
         this.flash = 1;

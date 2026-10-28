@@ -184,7 +184,7 @@
             'Спрайты: ' + R.spritesDrawn + '\n' +
             'Уровень: ' + G.Map.name + '  предметы ' + G.Map.itemsFound + '/' + G.Map.itemsTotal +
             '  секреты ' + G.Map.secretsFound + '/' + G.Map.secretsTotal +
-            '  цели ' + G.Map.killsFound + '/' + G.Map.killsTotal + '\n' +
+            '  враги ' + G.Map.killsFound + '/' + G.Map.killsTotal + '\n' +
             'Поз: ' + P.x.toFixed(2) + ', ' + P.y.toFixed(2) + '\n' +
             'Угол: ' + (P.angle * 180 / Math.PI).toFixed(0) + '°';
         }

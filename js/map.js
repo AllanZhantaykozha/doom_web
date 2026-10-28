@@ -40,7 +40,6 @@
       this.itemsTotal = this.itemsFound = this.secretsTotal = this.secretsFound = 0;
       this.killsTotal = this.killsFound = 0;
       G.Items.reset();
-      G.Enemies.reset();
       G.Projectiles.reset();
 
       for (let y = 0; y < h; y++) {
@@ -62,6 +61,7 @@
       this.w = w; this.h = h; this.cells = cells; this.doorAt = doorAt;
       this.name = level.name;
       this.startAngle = (level.startAngleDeg || 0) * Math.PI / 180;
+      G.Enemies.reset();        // после установки размеров: буферы потока зависят от w*h
 
       // Вторым проходом, когда сетка стен уже известна, создаём двери и предметы.
       for (let i = 0; i < specials.length; i += 3) {
@@ -134,10 +134,40 @@
       }
     },
 
-    // Стоит ли круг игрока в клетке двери (тогда её нельзя закрывать)
+    // Стоит ли в клетке двери игрок или враг (тогда её нельзя закрывать)
     occupied(d, px, py) {
       const r = G.CONFIG.PLAYER.radius + 0.05;
-      return px > d.x - r && px < d.x + 1 + r && py > d.y - r && py < d.y + 1 + r;
+      if (px > d.x - r && px < d.x + 1 + r && py > d.y - r && py < d.y + 1 + r) return true;
+      return G.Enemies.occupies(d.x, d.y);
+    },
+
+    // Проходима ли клетка для врагов при построении пути: пусто или дверь без ключа
+    // (враги открывают обычные двери, но не цветные и не секретные).
+    enemyPassable(cx, cy) {
+      if (cx < 0 || cy < 0 || cx >= this.w || cy >= this.h) return false;
+      const i = cy * this.w + cx, t = this.cells[i];
+      if (t === 0) return true;
+      if (t !== DOOR_CELL) return false;
+      const d = this.doors[this.doorAt[i]];
+      return d.key === 0 && !d.secret;
+    },
+
+    // Звук проходит через открытые клетки и приоткрытые двери; закрытая дверь его глушит
+    soundPassable(cx, cy) {
+      if (cx < 0 || cy < 0 || cx >= this.w || cy >= this.h) return false;
+      const i = cy * this.w + cx, t = this.cells[i];
+      if (t === 0) return true;
+      return t === DOOR_CELL && this.doors[this.doorAt[i]].open >= 0.3;
+    },
+
+    // Враг просит открыть дверь в клетке. Возвращает true, если проход уже свободен.
+    tryOpenDoor(cx, cy) {
+      const i = cy * this.w + cx;
+      if (this.cells[i] !== DOOR_CELL) return true;
+      const d = this.doors[this.doorAt[i]];
+      if (d.key !== 0 || d.secret) return false;
+      if (d.state === CLOSED || d.state === CLOSING) d.state = OPENING;
+      return d.open >= DOOR.passable;
     },
 
     // Один тик анимации дверей

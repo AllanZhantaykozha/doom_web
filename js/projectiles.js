@@ -3,18 +3,18 @@
 (function (G) {
   'use strict';
   const CFG = G.CONFIG;
-  const ROCKET = 0, EXPL = 1, PUFF = 2, BLOOD = 3;
+  const ROCKET = 0, EXPL = 1, PUFF = 2, BLOOD = 3, BOLT = 4;
   const POOL = 64;
   const FRAME_TIME = [0, 0.07, 0.07, 0.08];            // длительность кадра эффекта, с
   const EXPL_SIZES = [0.8, 1.1, 1.4, 1.6, 1.7, 1.6];
 
   const Projectiles = G.Projectiles = {
-    ROCKET, EXPL, PUFF, BLOOD,
+    ROCKET, EXPL, PUFF, BLOOD, BOLT,
     list: [],
 
     init() {
       for (let i = 0; i < POOL; i++) {
-        this.list.push({ x: 0, y: 0, vx: 0, vy: 0, kind: 0, t: 0, tex: null, size: 0.3, z: 0.3, active: false });
+        this.list.push({ x: 0, y: 0, vx: 0, vy: 0, kind: 0, t: 0, tex: null, size: 0.3, z: 0.3, dmg: 0, active: false });
       }
     },
 
@@ -38,6 +38,16 @@
       p.tex = G.Sprites.fx.rocket; p.size = 0.3; p.z = 0.35;
     },
 
+    // Кислотный снаряд врага: медленный, виден, от него можно уклониться
+    spawnBolt(x, y, angle, speed, dmg) {
+      const p = this.alloc();
+      if (!p) return;
+      p.active = true; p.kind = BOLT; p.t = 0; p.dmg = dmg;
+      p.x = x; p.y = y;
+      p.vx = Math.cos(angle) * speed; p.vy = Math.sin(angle) * speed;
+      p.tex = G.Sprites.fx.bolt; p.size = 0.32; p.z = 0.3;
+    },
+
     // Короткий эффект: пыль/кровь. z — высота центра над полом.
     effect(kind, x, y, z) {
       const p = this.alloc();
@@ -54,6 +64,7 @@
         const p = l[i];
         if (!p.active) continue;
         if (p.kind === ROCKET) this.updateRocket(p, dt);
+        else if (p.kind === BOLT) this.updateBolt(p, dt);
         else this.updateEffect(p, dt);
       }
     },
@@ -77,6 +88,23 @@
         p.x -= p.vx * k; p.y -= p.vy * k;
         this.explode(p);
       } else { p.x = nx; p.y = ny; }
+    },
+
+    updateBolt(p, dt) {
+      const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
+      const P = G.Player, dx = P.x - nx, dy = P.y - ny, rr = CFG.PLAYER.radius + 0.15;
+      if (!P.dead && dx * dx + dy * dy < rr * rr) {          // попадание в игрока
+        P.damage(p.dmg, p.x - p.vx, p.y - p.vy);
+        p.active = false;
+        this.effect(PUFF, nx, ny, 0.3);
+        return;
+      }
+      if (G.Map.isSolid(Math.floor(nx), Math.floor(ny))) {   // стена: брызги чуть перед ней
+        p.active = false;
+        this.effect(PUFF, p.x, p.y, 0.3);
+        return;
+      }
+      p.x = nx; p.y = ny;
     },
 
     updateEffect(p, dt) {

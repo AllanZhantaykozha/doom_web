@@ -168,7 +168,166 @@
     }
   }
 
+
+  // ---- Враги: 4 типа, одно направление взгляда (в камеру) ----
+  function limb(g, x1, y1, x2, y2, w, col) {
+    g.lineCap = 'butt';
+    g.strokeStyle = '#111'; g.lineWidth = w + 2;
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+    g.strokeStyle = col; g.lineWidth = w;
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  }
+  function disc(g, col, x, y, r) { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+
+  // Гуманоид. o.atk: 0 нет, 1 замах, 2 удар/выстрел; o.kind: rifle | claws | cannon
+  function drawHumanoid(g, o) {
+    const b = o.bulk || 1, cx = 32 + (o.lean || 0), ph = o.phase || 0;
+    const hy = o.headY || 13, hr = o.headR || 7;
+    // ноги
+    limb(g, cx - 5 * b, 40, cx - 5 * b + ph * 6, 61 - Math.max(0, -ph) * 4, 7 * b, o.leg);
+    limb(g, cx + 5 * b, 40, cx + 5 * b - ph * 6, 61 - Math.max(0, ph) * 4, 7 * b, o.leg);
+    rect(g, o.boot, cx - 5 * b + ph * 6 - 4.5 * b, 59 - Math.max(0, -ph) * 4, 9 * b, 4);
+    rect(g, o.boot, cx + 5 * b - ph * 6 - 4.5 * b, 59 - Math.max(0, ph) * 4, 9 * b, 4);
+    // торс
+    rect(g, '#111', cx - 9 * b - 1, 20, 18 * b + 2, 23);
+    rect(g, o.cloth, cx - 9 * b, 21, 18 * b, 21);
+    rect(g, o.clothL || o.cloth, cx - 9 * b, 21, 4 * b, 18);
+    rect(g, o.clothD, cx - 9 * b, 38, 18 * b, 3);
+    if (o.plate) { rect(g, o.plate, cx - 6 * b, 24, 12 * b, 8); rect(g, '#111', cx - 6 * b, 32, 12 * b, 1); }
+    // руки: down — вдоль тела, aim — вперёд, up — занесены
+    const lx = cx - 9 * b - 1, rx = cx + 9 * b + 1, aw = 5 * b;
+    if (o.kind === 'claws') {
+      const up = o.atk === 1 ? -8 : 0, fwd = o.atk === 2 ? 14 : 0;
+      limb(g, lx, 24, lx - 3 + (o.atk === 2 ? 8 : 0), 38 + up - fwd * 0.3, aw, o.skin);
+      limb(g, rx, 24, rx + 3 - (o.atk === 2 ? 8 : 0), 38 + up - fwd * 0.3, aw, o.skin);
+      const hy2 = 38 + up - fwd * 0.3;
+      for (let k = 0; k < 3; k++) {                          // когти
+        rect(g, '#eee', lx - 6 + (o.atk === 2 ? 8 : 0) + k * 2, hy2 + 1, 1, 5);
+        rect(g, '#eee', rx + 1 - (o.atk === 2 ? 8 : 0) + k * 2, hy2 + 1, 1, 5);
+      }
+    } else if (o.kind === 'cannon') {
+      limb(g, lx, 24, lx - 2, 40, aw, o.cloth);
+      limb(g, rx, 25, rx + 1, o.atk ? 33 : 38, aw + 1, o.cloth);
+      rect(g, '#111', rx - 5, o.atk ? 26 : 30, 12, 14);                 // орудие
+      rect(g, o.plate || '#667', rx - 4, o.atk ? 27 : 31, 10, 12);
+      rect(g, '#111', rx - 2, o.atk ? 23 : 27, 6, 5);
+      if (o.atk === 1) { disc(g, '#ff8a30', rx + 1, 25, 4); }         // заряд
+      if (o.atk === 2) star(g, rx + 1, 22, 11);
+    } else {                                              // rifle
+      if (o.atk) {
+        limb(g, rx, 24, cx + 5, 31, aw, o.skin);
+        limb(g, lx, 24, cx + 1, 33, aw, o.skin);
+        rect(g, '#111', cx + 1, 26, 8, 6); rect(g, '#555', cx + 2, 27, 6, 4);      // ствол в камеру
+        rect(g, '#111', cx + 3, 30, 4, 3);
+        if (o.atk === 2) star(g, cx + 5, 26, 10);
+      } else {
+        limb(g, lx, 24, lx - 2, 39, aw, o.skin);
+        limb(g, rx, 24, rx + 1, 38, aw, o.skin);
+        rect(g, '#111', rx - 1, 30, 5, 17); rect(g, '#555', rx, 31, 3, 15);        // винтовка опущена
+      }
+    }
+    // голова
+    const hx = cx + (o.hx || 0);
+    disc(g, '#111', hx, hy, hr + 1);
+    disc(g, o.skin, hx, hy, hr);
+    if (o.helm) {
+      g.fillStyle = o.helm; g.beginPath(); g.arc(hx, hy - 1, hr + 1, Math.PI, 0); g.fill();
+      rect(g, '#111', hx - hr - 1, hy - 1, 2 * hr + 2, 1);
+    }
+    if (o.jaw) { rect(g, '#111', hx - 5, hy + 2, 10, 6); rect(g, o.skinD, hx - 4, hy + 3, 8, 4); }
+    // лицо
+    if (o.visor) {
+      rect(g, '#111', hx - 5, hy - 2, 10, 4); rect(g, o.pain ? '#ffa090' : o.visor, hx - 4, hy - 1, 8, 2);
+    } else if (o.pain) {
+      rect(g, '#222', hx - 4, hy - 1, 3, 1); rect(g, '#222', hx + 1, hy - 1, 3, 1);
+    } else {
+      rect(g, o.eye || '#fff', hx - 4, hy - 2, 3, 3); rect(g, o.eye || '#fff', hx + 1, hy - 2, 3, 3);
+      rect(g, '#111', hx - 3, hy - 1, 1, 2); rect(g, '#111', hx + 2, hy - 1, 1, 2);
+    }
+    if (o.kind === 'claws') {                              // клыки
+      const open = o.atk || o.pain;
+      rect(g, '#300', hx - 4, hy + 3, 8, open ? 4 : 2);
+      rect(g, '#fff', hx - 4, hy + 3, 1, 2); rect(g, '#fff', hx + 3, hy + 3, 1, 2);
+      rect(g, '#fff', hx - 2, hy + 3, 1, 1); rect(g, '#fff', hx + 1, hy + 3, 1, 1);
+    } else if (!o.visor) {
+      rect(g, '#411', hx - 2, hy + 4, 4, o.pain || o.atk ? 2 : 1);
+    }
+    if (o.pads) {                                           // наплечники
+      rect(g, '#111', cx - 9 * b - 6, 19, 11, 8); rect(g, o.pads, cx - 9 * b - 5, 20, 9, 6);
+      rect(g, '#111', cx + 9 * b - 4, 19, 11, 8); rect(g, o.pads, cx + 9 * b - 3, 20, 9, 6);
+    }
+  }
+
+  // Кислотник: студенистое существо с кислотным мешком; phase — «дыхание» шага
+  function drawSpitter(g, o) {
+    const ph = o.phase || 0, sq = ph * 2, lean = o.lean || 0;
+    // ножки-наросты
+    rect(g, '#111', 16 + lean, 56, 10, 7); rect(g, '#2f6a1c', 17 + lean, 57 + Math.max(0, -ph) * -1, 8, 5);
+    rect(g, '#111', 38 + lean, 56, 10, 7); rect(g, '#2f6a1c', 39 + lean, 57 + Math.max(0, ph) * -1, 8, 5);
+    // тело
+    g.fillStyle = '#111'; g.beginPath(); g.ellipse(32 + lean, 40, 21 + sq * 0.5, 19 - sq, 0, 0, 7); g.fill();
+    g.fillStyle = o.pain ? '#9ad070' : '#58a832'; g.beginPath(); g.ellipse(32 + lean, 40, 19 + sq * 0.5, 17 - sq, 0, 0, 7); g.fill();
+    g.fillStyle = '#7ccc4a'; g.beginPath(); g.ellipse(26 + lean, 33, 7, 5, -0.5, 0, 7); g.fill();
+    // кислотный мешок
+    const glow = o.atk === 1 ? '#e0ff70' : o.atk === 2 ? '#f6ffb0' : '#a6e02f';
+    disc(g, '#111', 32 + lean, 46, 8); disc(g, glow, 32 + lean, 46, 7);
+    disc(g, '#fff', 30 + lean, 44, 2);
+    // щупальца-руки
+    limb(g, 14 + lean, 36, 6 + lean, o.atk === 1 ? 22 : 46, 5, '#58a832');
+    limb(g, 50 + lean, 36, 58 + lean, o.atk === 1 ? 22 : 46, 5, '#58a832');
+    // глаза на стебельках
+    limb(g, 24 + lean, 26, 22 + lean, 17, 3, '#2f6a1c'); limb(g, 40 + lean, 26, 42 + lean, 17, 3, '#2f6a1c');
+    disc(g, '#111', 22 + lean, 15, 5); disc(g, o.pain ? '#444' : '#fff', 22 + lean, 15, 4); disc(g, '#c00', 22 + lean, 15, 2);
+    disc(g, '#111', 42 + lean, 15, 5); disc(g, o.pain ? '#444' : '#fff', 42 + lean, 15, 4); disc(g, '#c00', 42 + lean, 15, 2);
+    // пасть
+    const open = o.atk ? 6 : 2;
+    g.fillStyle = '#111'; g.beginPath(); g.ellipse(32 + lean, 33, 8, open, 0, 0, 7); g.fill();
+    if (o.atk === 2) disc(g, '#b8ff40', 32 + lean, 33, 4);
+  }
+
+  function drawCorpseHumanoid(g, o, pool) {
+    const b = o.bulk || 1;
+    g.fillStyle = pool > 1 ? '#5a0d0d' : '#7a1212';
+    g.beginPath(); g.ellipse(32, 60, 20 + pool * 5, 4 + pool, 0, 0, 7); g.fill();
+    limb(g, 38, 55, 58, 58, 6 * b, o.leg);
+    rect(g, o.boot, 56, 56, 5, 5);
+    limb(g, 12, 55, 40, 55, 11 * b, o.cloth);
+    rect(g, o.clothD, 36, 50, 3, 11 * b);
+    limb(g, 16, 51, 28, 49, 4 * b, o.skin);
+    disc(g, '#111', 8, 53, 7); disc(g, o.skin, 8, 53, 6);
+    if (o.helm) { g.fillStyle = o.helm; g.beginPath(); g.arc(8, 52, 6, Math.PI * 0.6, Math.PI * 1.7); g.fill(); }
+  }
+  function drawCorpseSpitter(g, pool) {
+    g.fillStyle = '#111'; g.beginPath(); g.ellipse(32, 57, 26 + pool * 3, 7, 0, 0, 7); g.fill();
+    g.fillStyle = '#58a832'; g.beginPath(); g.ellipse(32, 57, 24 + pool * 3, 5.5, 0, 0, 7); g.fill();
+    g.fillStyle = '#a6e02f'; g.beginPath(); g.ellipse(36, 56, 6, 2.5, 0, 0, 7); g.fill();
+    disc(g, '#222', 14, 56, 2); disc(g, '#222', 50, 57, 2);
+  }
+
+  // Собирает набор кадров типа врага: walk×4, atk×2, pain, death×5 (Uint32Array по столбцам)
+  function buildEnemySet(draw, corpse, style) {
+    const phases = [-0.9, 0, 0.9, 0];
+    const set = { walk: [], atk: [], pain: null, death: [] };
+    for (let i = 0; i < 4; i++) set.walk.push(make((g) => draw(g, Object.assign({}, style, { phase: phases[i] }))));
+    set.atk.push(make((g) => draw(g, Object.assign({}, style, { atk: 1 }))));
+    set.atk.push(make((g) => draw(g, Object.assign({}, style, { atk: 2 }))));
+    set.pain = make((g) => draw(g, Object.assign({}, style, { pain: true, lean: -2, hx: -1 })));
+    // Падение: поворот вокруг ступней, затем лежащее тело с растущей лужей
+    for (const ang of [0.2, 0.65, 1.2]) {
+      set.death.push(make((g) => {
+        g.save();
+        g.translate(20, 62); g.rotate(ang); g.scale(0.92, 0.92); g.translate(-32, -62);
+        draw(g, Object.assign({}, style, { pain: true }));
+        g.restore();
+      }));
+    }
+    set.death.push(make((g) => corpse(g, style, 1)));
+    set.death.push(make((g) => corpse(g, style, 2)));
+    return set;
+  }
+
   G.Sprites = {
+    enemies: {},       // enemies[тип] = { walk[4], atk[2], pain, death[5] }
     weapons: [],       // weapons[оружие][кадр] -> canvas 64x64
     fx: {},
     items: {},
@@ -305,6 +464,26 @@
           }
         }));
       }
+
+
+      // Враги
+      const EN = this.enemies;
+      EN.guard = buildEnemySet(drawHumanoid, drawCorpseHumanoid, {
+        kind: 'rifle', skin: '#c9966b', skinD: '#8a6240', cloth: '#5b6b3a', clothL: '#6f8148', clothD: '#3a4524',
+        leg: '#46532c', boot: '#222', helm: '#6b7078' });
+      EN.fang = buildEnemySet(drawHumanoid, (g, st, pool) => drawCorpseHumanoid(g, st, pool), {
+        kind: 'claws', skin: '#a8432f', skinD: '#6e2a1c', cloth: '#a8432f', clothL: '#c2573f', clothD: '#6e2a1c',
+        leg: '#2a2230', boot: '#111', eye: '#ffe04a', jaw: true, headY: 17, hx: 0, bulk: 0.95 });
+      EN.spitter = buildEnemySet(drawSpitter, (g, st, pool) => drawCorpseSpitter(g, pool), {});
+      EN.bulwark = buildEnemySet(drawHumanoid, drawCorpseHumanoid, {
+        kind: 'cannon', skin: '#7a828f', skinD: '#3a4050', cloth: '#5a6678', clothL: '#7a889c', clothD: '#2d3440',
+        leg: '#3d4757', boot: '#1c2028', helm: '#4a5568', visor: '#ff3a2a', plate: '#b08a2a', pads: '#6a7a90',
+        bulk: 1.45, headY: 12, headR: 6 });
+
+      // Снаряд кислотника
+      this.fx.bolt = make((g) => {
+        disc(g, '#2a6a10', 32, 32, 14); disc(g, '#7cd62f', 32, 32, 11); disc(g, '#d8ff7a', 30, 30, 6); disc(g, '#fff', 28, 28, 2);
+      });
 
       // Оружие: кадры по индексам из CONFIG.WEAPONS[].seq
       const W = this.weapons;

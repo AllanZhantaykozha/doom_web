@@ -220,7 +220,7 @@
       const P = G.Player;
       if (P.dead) return;
       const spr = G.Sprites.weapons[P.weapon][P.wFrame];
-      const sc = this.scale, size = 128 * sc;
+      const sc = this.scale, size = 64 * G.CONFIG.WEAPON_SCALE * sc;
       const bx = Math.sin(P.bobPhase) * 6 * P.bobAmp * sc;
       const by = Math.abs(Math.cos(P.bobPhase)) * 5 * P.bobAmp * sc;
       const x = Math.round(this.w / 2 - size / 2 + bx);
