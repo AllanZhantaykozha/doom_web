@@ -9,6 +9,9 @@
     last: 0,
     resIndex: 0,
     debug: false,
+    levelIndex: 0,
+    pendingExit: false,
+    msgTimer: 0,
     // Статистика для отладочного оверлея
     frameMs: 0, fps: 0, fpsFrames: 0, fpsTime: 0, dbgTime: 0,
 
@@ -19,7 +22,15 @@
 
       G.Input.init(this.canvas);
       G.Textures.init();
+      G.Sprites.init();
+      this.msgEl = document.getElementById('msg');
+      this.hudEl = {
+        hp: document.getElementById('hp'), ar: document.getElementById('ar'),
+        bu: document.getElementById('bu'), sh: document.getElementById('sh'),
+        k1: document.getElementById('k1'), k2: document.getElementById('k2'), k3: document.getElementById('k3')
+      };
       G.Renderer.init(this.canvas);
+      G.Player.newGame();
       this.loadLevel(0);
 
       // Пауза при выходе из pointer lock (Esc) и при потере фокуса
@@ -40,8 +51,36 @@
     },
 
     loadLevel(i) {
+      this.levelIndex = i;
+      this.pendingExit = false;
       G.Map.load(G.LEVELS[i]);
       G.Player.reset(G.Map.startX, G.Map.startY, G.Map.startAngle);
+      G.Player.clearKeys();
+      this.message(G.Map.name);
+    },
+
+    // Переход по выходу. Последний уровень пока зацикливается (экран победы — этап 5).
+    nextLevel() {
+      this.loadLevel((this.levelIndex + 1) % G.LEVELS.length);
+    },
+
+    // Временное сообщение (позже заменится на HUD в canvas)
+    message(text) {
+      this.msgEl.textContent = text;
+      this.msgTimer = 2.5;
+    },
+
+    // Минимальный HUD в DOM: обновляется только при изменении данных
+    updateHud() {
+      const P = G.Player, H = this.hudEl;
+      H.hp.textContent = Math.ceil(P.health);
+      H.ar.textContent = Math.ceil(P.armor);
+      H.bu.textContent = P.ammo.bullets;
+      H.sh.textContent = P.ammo.shells;
+      H.k1.classList.toggle('on', P.keys[1]);
+      H.k2.classList.toggle('on', P.keys[2]);
+      H.k3.classList.toggle('on', P.keys[3]);
+      P.dirty = false;
     },
 
     showOverlay(v) { this.overlay.hidden = !v; },
@@ -94,11 +133,26 @@
         const dx = G.Input.consumeMouse();
         if (dx !== 0) G.Player.turn(dx * CFG.PLAYER.mouseSens);
 
+        // «Использовать» — раз за кадр (в тике одно нажатие сработало бы на каждом из тиков кадра)
+        if (G.Input.wasPressed('KeyE') || G.Input.wasPressed('Space')) {
+          const msg = G.Map.use(G.Player.x, G.Player.y, G.Player.angle, G.Player);
+          if (msg) this.message(msg);
+        }
+
         this.acc += dt;
         while (this.acc >= CFG.STEP) {
           G.Player.update(CFG.STEP);
+          G.Map.update(CFG.STEP, G.Player.x, G.Player.y);
+          G.Items.update(G.Player.x, G.Player.y);
           this.acc -= CFG.STEP;
+          if (this.pendingExit) { this.nextLevel(); this.acc = 0; break; }
         }
+
+        if (this.msgTimer > 0) {
+          this.msgTimer -= dt;
+          if (this.msgTimer <= 0) this.msgEl.textContent = '';
+        }
+        if (G.Player.dirty) this.updateHud();
       }
 
       G.Renderer.render(G.Player.x, G.Player.y, G.Player.angle);
@@ -121,6 +175,8 @@
             'Кадр (CPU): ' + this.frameMs.toFixed(2) + ' мс\n' +
             'Разрешение: ' + R.w + 'x' + R.h + '\n' +
             'Спрайты: ' + R.spritesDrawn + '\n' +
+            'Уровень: ' + G.Map.name + '  предметы ' + G.Map.itemsFound + '/' + G.Map.itemsTotal +
+            '  секреты ' + G.Map.secretsFound + '/' + G.Map.secretsTotal + '\n' +
             'Поз: ' + P.x.toFixed(2) + ', ' + P.y.toFixed(2) + '\n' +
             'Угол: ' + (P.angle * 180 / Math.PI).toFixed(0) + '°';
         }

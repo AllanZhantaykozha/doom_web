@@ -166,6 +166,32 @@
     setRGB(o, 82 * k, 84 * k, 104 * k);
   }
 
+  // Двери 64x64: металл, предупредительные полосы сверху/снизу, цветная пластина по центру.
+  function makeDoorGen(ar, ag, ab) {
+    return function (x, y, o) {
+      let k = 0.72 + hash(x, y, 91) * 0.1 + hash(0, y, 92) * 0.08;
+      if (x < 2 || x > 61) k = 0.3;
+      else if (x < 4) k *= 1.15;
+      else if (x > 59) k *= 0.8;
+      let r = 100 * k, g = 108 * k, b = 118 * k;
+      if (y === 9 || y === 54) {
+        r = g = b = 30;
+      } else if (y < 9 || y > 54) {                       // полосы «осторожно»
+        const s = (((x + y) >> 3) & 1) === 0;
+        r = s ? 210 * k : 35; g = s ? 175 * k : 35; b = s ? 40 * k : 35;
+      } else if (x >= 10 && x <= 53 && y >= 16 && y <= 47) {   // вставка
+        if (x === 10 || x === 53 || y === 16 || y === 47) { r = ar; g = ag; b = ab; }
+        else { r *= 0.7; g *= 0.7; b *= 0.72; }
+      }
+      const dx = x - 32, dy = y - 32, d2 = dx * dx + dy * dy;
+      if (y > 9 && y < 54 && d2 <= 64) {                  // цветная пластина
+        const e = d2 > 49 ? 0.55 : 0.85 + 0.15 * k;
+        r = ar * e; g = ag * e; b = ab * e;
+      }
+      setRGB(o, r, g, b);
+    };
+  }
+
   // Запекание: из генератора получаем LIGHT_LEVELS массивов Uint32Array(64*64).
   // colMajor=true: индекс = x*64 + y (удобно для чтения вдоль столбца стены);
   // иначе y*64 + x (удобно для пола/потолка).
@@ -193,6 +219,7 @@
 
   G.Textures = {
     SIZE, LIGHT_LEVELS, WALL_TYPES, pack,
+    doors: null,   // doors[0 обычная, 1 красная, 2 синяя, 3 жёлтая][lightLevel] (по столбцам)
     walls: null,   // walls[type 1..6][lightLevel] -> Uint32Array (по столбцам)
     floor: null,   // floor[lightLevel] -> Uint32Array (по строкам)
     ceil: null,
@@ -201,6 +228,12 @@
       const gens = [null, genBrick, genStone, genMoss, genMetal, genWood, genRune];
       this.walls = new Array(WALL_TYPES + 1);
       for (let t = 1; t <= WALL_TYPES; t++) this.walls[t] = bake(gens[t], true);
+      this.doors = [
+        bake(makeDoorGen(165, 175, 185), true),
+        bake(makeDoorGen(230, 50, 40), true),
+        bake(makeDoorGen(50, 90, 235), true),
+        bake(makeDoorGen(235, 200, 50), true)
+      ];
       this.floor = bake(genFloor, false);
       this.ceil = bake(genCeil, false);
     },

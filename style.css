@@ -46,3 +46,28 @@ html, body {
   pointer-events: none;
 }
 #debug[hidden] { display: none; }
+
+/* Временный HUD этапа 2 (будет заменён отрисовкой в canvas на этапе 3) */
+#hud {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  display: flex; gap: 18px; justify-content: center;
+  padding: 6px;
+  font-size: 15px;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+#hud b { color: #fff; }
+#hud .key { padding: 0 6px; border: 1px solid #555; color: #555; }
+#hud .key.on.r { background: #c62828; color: #fff; border-color: #c62828; }
+#hud .key.on.b { background: #2f5fe0; color: #fff; border-color: #2f5fe0; }
+#hud .key.on.y { background: #e8c010; color: #000; border-color: #e8c010; }
+#msg {
+  position: fixed;
+  left: 0; right: 0; top: 12%;
+  text-align: center;
+  font-size: 20px;
+  color: #fff;
+  text-shadow: 1px 1px 2px #000;
+  pointer-events: none;
+}
