@@ -95,12 +95,14 @@
       const P = G.Player, dx = P.x - nx, dy = P.y - ny, rr = CFG.PLAYER.radius + 0.15;
       if (!P.dead && dx * dx + dy * dy < rr * rr) {          // попадание в игрока
         P.damage(p.dmg, p.x - p.vx, p.y - p.vy);
+        G.Audio.play('bolthit', nx, ny);
         p.active = false;
         this.effect(PUFF, nx, ny, 0.3);
         return;
       }
       if (G.Map.isSolid(Math.floor(nx), Math.floor(ny))) {   // стена: брызги чуть перед ней
         p.active = false;
+        G.Audio.play('bolthit', p.x, p.y, 0.7);
         this.effect(PUFF, p.x, p.y, 0.3);
         return;
       }
@@ -122,6 +124,7 @@
       const R = CFG.ROCKET.radius, D = p.dmg;          // урон по врагам (с учётом сферы ярости)
       const ex = p.x, ey = p.y;
       p.kind = EXPL; p.t = 0; p.vx = p.vy = 0; p.z = 0.25;
+      G.Audio.play('explosion', ex, ey);
       p.tex = G.Sprites.fx.expl[0]; p.size = EXPL_SIZES[0];
 
       const en = G.Enemies.list;

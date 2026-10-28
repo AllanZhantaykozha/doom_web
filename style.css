@@ -24,14 +24,46 @@ html, body {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.72);
-  cursor: pointer;
   text-align: center;
   user-select: none;
+  overflow: auto;
 }
 #overlay[hidden] { display: none; }
-#overlay h1 { font-size: 48px; letter-spacing: 8px; margin: 0 0 16px; color: #c33; }
-#overlay .hint { font-size: 22px; margin: 0 0 24px; }
-#overlay .keys { font-size: 14px; line-height: 1.7; color: #999; }
+#overlay h1 { font-size: 48px; letter-spacing: 8px; margin: 0 0 14px; color: #c33; }
+#overlay .sub { font-size: 16px; color: #999; margin: 0 0 24px; }
+#overlay button {
+  display: block;
+  width: 300px;
+  margin: 6px 0;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 18px;
+  color: #ddd;
+  background: #2a2a2a;
+  border: 2px solid #555;
+  cursor: pointer;
+}
+#overlay button:hover:not(:disabled) { background: #3a3a3a; border-color: #c33; color: #fff; }
+#overlay button:disabled { color: #666; border-color: #333; cursor: default; }
+#overlay button small { display: block; margin-top: 3px; font-size: 12px; color: #999; }
+#overlay .keys { font-size: 13px; line-height: 1.7; color: #888; margin-top: 22px; }
+#overlay .note { min-height: 20px; margin: 12px 0 0; color: #8c8; font-size: 14px; }
+#overlay .settings { width: 420px; max-width: 92vw; margin-bottom: 10px; }
+#overlay .row { display: flex; align-items: center; gap: 12px; padding: 6px 0; font-size: 16px; text-align: left; }
+#overlay .row span { flex: 1; }
+#overlay .row output { width: 32px; text-align: right; color: #aaa; }
+#overlay input[type=range] { width: 160px; }
+#overlay select { font: inherit; background: #2a2a2a; color: #ddd; border: 1px solid #555; padding: 3px; }
+
+#fps {
+  position: fixed;
+  right: 8px; bottom: 8px;
+  font-size: 12px;
+  color: #0f0;
+  text-shadow: 1px 1px 1px #000;
+  pointer-events: none;
+}
+#fps[hidden] { display: none; }
 
 #debug {
   position: fixed;

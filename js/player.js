@@ -32,6 +32,7 @@
     hurtFlash: 0, pickupFlash: 0,
     painTimer: 0, grinTimer: 0, lookTimer: 0, faceLook: 0,
     glance: 0, glanceTimer: 1,
+    stepTimer: 0, painCool: 0,
 
     reset(x, y, angle) {
       this.x = x;
@@ -51,6 +52,7 @@
       this.heat = 0; this.flash = 0;
       this.dead = false; this.deathTime = 0;
       this.invuln = 0; this.quad = 0;
+      this.stepTimer = 0;
       this.kx = this.ky = 0;
       this.hurtFlash = this.pickupFlash = 0;
       this.painTimer = this.grinTimer = this.lookTimer = 0;
@@ -103,6 +105,7 @@
       this.armor -= absorb;
       this.health -= amount - absorb;
       this.hurtFlash = Math.min(1, this.hurtFlash + amount / 40);
+      if (this.painCool <= 0) { G.Audio.play('pain'); this.painCool = 0.3; }
       this.painTimer = amount >= 20 ? 0.6 : 0.3;
       // Лицо смотрит на источник: знак угла между взглядом и направлением на источник
       let rel = Math.atan2(srcY - this.y, srcX - this.x) - this.angle;
@@ -114,6 +117,7 @@
         this.health = 0;
         this.dead = true;
         this.deathTime = 0;
+        G.Audio.play('death');
         G.Game.message('Вы погибли');
       }
     },
@@ -126,7 +130,7 @@
       if (i === this.weapon && this.switching === 0) return;
       if (i === this.wantWeapon && this.switching !== 0) return;
       this.wantWeapon = i;
-      if (this.switching !== 1) this.switching = 1;
+      if (this.switching !== 1) { this.switching = 1; G.Audio.play('click'); }
       this.dirty = true;
     },
 
@@ -156,6 +160,7 @@
       const C = G.CONFIG;
       if (w.ammo !== null) { this.ammo[w.ammo] -= w.cost; this.dirty = true; }
       const mul = this.quad > 0 ? C.SPHERE.quadMul : 1;     // сфера ярости
+      G.Audio.play(w.sound);
       if (w.noise) G.Enemies.noise(this.x, this.y, w.noise);   // выстрел будит врагов поблизости
       if (w.kind === 'rocket') {
         G.Projectiles.spawnRocket(this.x + Math.cos(this.angle) * 0.3, this.y + Math.sin(this.angle) * 0.3, this.angle,
@@ -253,6 +258,7 @@
       if (this.hurtFlash > 0) this.hurtFlash = Math.max(0, this.hurtFlash - dt * 1.5);
       if (this.pickupFlash > 0) this.pickupFlash = Math.max(0, this.pickupFlash - dt * 1.5);
       if (this.painTimer > 0) this.painTimer -= dt;
+      if (this.painCool > 0) this.painCool -= dt;
       if (this.grinTimer > 0) this.grinTimer -= dt;
       if (this.lookTimer > 0) this.lookTimer -= dt;
       this.glanceTimer -= dt;
@@ -314,6 +320,15 @@
       // Скольжение: оси проверяются раздельно; враги тоже блокируют движение
       if (dx !== 0 && !M.blocked(this.x + dx, this.y, r) && !E.blocked(this.x + dx, this.y, r)) this.x += dx;
       if (dy !== 0 && !M.blocked(this.x, this.y + dy, r) && !E.blocked(this.x, this.y + dy, r)) this.y += dy;
+
+      // Шаги: чаще при беге; высота слегка меняется, чтобы не было «пулемёта» одинаковых звуков
+      if (len > 0) {
+        this.stepTimer -= dt;
+        if (this.stepTimer <= 0) {
+          this.stepTimer = run ? 0.3 : 0.44;
+          G.Audio.play('step', undefined, undefined, 0.8, 0.85 + Math.random() * 0.3);
+        }
+      } else this.stepTimer = 0;
 
       // Покачивание оружия: амплитуда плавно растёт при ходьбе
       const target = len > 0 ? (run ? 1.3 : 1) : 0;

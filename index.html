@@ -9,20 +9,16 @@
 <body>
 <canvas id="screen" width="320" height="200"></canvas>
 <pre id="debug" hidden></pre>
+<div id="fps" hidden></div>
 <div id="msg"></div>
 <div id="status"></div>
 <div id="endscreen" hidden></div>
-<div id="overlay">
-  <h1>IRONHOLLOW</h1>
-  <p class="hint">Нажмите, чтобы начать</p>
-  <p class="keys">WASD — движение · Shift — бег · Мышь / стрелки — поворот · E / Пробел — открыть<br>
-  Ctrl / ЛКМ — огонь · 1–5 / колесо — оружие · Enter — подтвердить экран<br>
-  Esc — пауза · F3 — отладка · F4 — разрешение 320×200 / 640×400</p>
-</div>
+<div id="overlay"></div>
 
 <!-- Порядок важен: без ES-модулей, общий namespace GAME -->
 <script src="js/config.js"></script>
 <script src="js/input.js"></script>
+<script src="js/audio.js"></script>
 <script src="js/textures.js"></script>
 <script src="js/sprites.js"></script>
 <script src="js/levels.js"></script>

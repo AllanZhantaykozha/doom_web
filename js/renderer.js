@@ -67,7 +67,8 @@
     render(px, py, angle) {
       const w = this.w, h = this.vh, buf = this.buf, zbuf = this.zbuf, camX = this.camX;
       const boost = G.Player.flash;                    // вспышка выстрела подсвечивает ближние поверхности
-      const M = G.Map, cells = M.cells, mw = M.w, mh = M.h, doors = M.doors, doorAt = M.doorAt;
+      const M = G.Map, cells = M.cells, mw = M.w, mh = M.h, doors = M.doors, doorAt = M.doorAt, seen = M.seen;
+      seen[Math.floor(py) * mw + Math.floor(px)] = 1;
       const T = G.Textures, L = T.LIGHT_LEVELS - 1;
 
       // Камера: dir — взгляд, plane — вектор «вправо» длиной tan(FOV/2).
@@ -123,6 +124,7 @@
           else { sideY += deltaY; mapY += stepY; side = 1; }
           if (mapX < 0 || mapY < 0 || mapX >= mw || mapY >= mh) { type = 1; break; }
           const ci = mapY * mw + mapX;
+          seen[ci] = 1;                                   // для мини-карты: клетка увидена
           const t = cells[ci];
           if (t === 0) continue;
           if (t !== 10) { type = t; break; }
@@ -209,7 +211,7 @@
       this.drawSprites(px, py, dirX, dirY, planeX, planeY);
       const ctx = this.ctx;
       ctx.putImageData(this.image, 0, 0, 0, 0, w, h);   // только область 3D-вида
-      this.drawWeapon();
+      if (G.Game.mapOpen) this.drawMap(); else this.drawWeapon();
       this.drawOverlays();
       G.Hud.update();
       ctx.drawImage(G.Hud.canvas, 0, h);
@@ -226,6 +228,47 @@
       const x = Math.round(this.w / 2 - size / 2 + bx);
       const y = Math.round(this.vh - size + 1 * sc + by + P.wLower * size);
       this.ctx.drawImage(spr, x, y, size, size);
+    },
+
+    // Мини-карта (Tab): только увиденные клетки; секретные двери выглядят как стены
+    drawMap() {
+      const M = G.Map, P = G.Player, ctx = this.ctx, w = this.w, vh = this.vh;
+      const sc = Math.max(2, Math.floor(Math.min(w / M.w, vh / M.h) * 0.92));
+      const ox = Math.floor((w - M.w * sc) / 2), oy = Math.floor((vh - M.h * sc) / 2);
+      const WALL = ['', '#a05050', '#6a8ab0', '#6aa06a', '#b0a060', '#a070b0', '#60a0a0', '#999', '#a08060', '#808090'];
+      const DOOR = ['#d0d0d0', '#e53935', '#3d6df0', '#f2c914'];
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, vh);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#222'; ctx.fillRect(ox - 1, oy - 1, M.w * sc + 2, M.h * sc + 2);   // рамка карты
+      let last = '';
+      for (let y = 0; y < M.h; y++) {
+        for (let x = 0; x < M.w; x++) {
+          const i = y * M.w + x;
+          if (!M.seen[i]) continue;
+          const t = M.cells[i];
+          let col;
+          if (t === 0) col = '#454545';
+          else if (t === 10) { const d = M.doors[M.doorAt[i]]; col = d.secret ? WALL[d.tex] : DOOR[d.key]; }
+          else col = WALL[t] || '#999';
+          if (col !== last) { ctx.fillStyle = col; last = col; }
+          ctx.fillRect(ox + x * sc, oy + y * sc, sc, sc);
+        }
+      }
+      const items = G.Items.list;                       // выход виден на карте, как только увиден
+      ctx.fillStyle = '#3d9';
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (it.def.exit && M.seen[Math.floor(it.y) * M.w + Math.floor(it.x)]) ctx.fillRect(ox + Math.floor(it.x) * sc, oy + Math.floor(it.y) * sc, sc, sc);
+      }
+      // Игрок: стрелка по направлению взгляда
+      const cx = ox + P.x * sc, cy = oy + P.y * sc, a = P.angle, r = Math.max(3, sc * 0.9);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      ctx.lineTo(cx + Math.cos(a + 2.5) * r * 0.8, cy + Math.sin(a + 2.5) * r * 0.8);
+      ctx.lineTo(cx + Math.cos(a - 2.5) * r * 0.8, cy + Math.sin(a - 2.5) * r * 0.8);
+      ctx.closePath(); ctx.fill();
     },
 
     // Экранные эффекты: красная вспышка при уроне, жёлтая при подборе, затемнение при смерти

@@ -4,7 +4,7 @@
 
   // Коды клавиш, для которых отменяем действие браузера по умолчанию.
   const PREVENT = new Set(['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-    'F3', 'F4', 'ControlLeft', 'ControlRight']);
+    'F3', 'F4', 'F5', 'F9', 'ControlLeft', 'ControlRight']);
 
   const Input = G.Input = {
     down: new Set(),        // удерживаемые коды (KeyboardEvent.code)

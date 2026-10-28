@@ -26,6 +26,7 @@
     name: '',
     itemsTotal: 0, itemsFound: 0,
     killsTotal: 0, killsFound: 0,
+    seen: null,          // Uint8Array w*h: клетки, которые игрок уже видел (для мини-карты)
     secretsTotal: 0, secretsFound: 0,
 
     load(level) {
@@ -59,6 +60,7 @@
       if (!found) throw new Error('Уровень "' + level.name + '": нет стартовой точки @');
 
       this.w = w; this.h = h; this.cells = cells; this.doorAt = doorAt;
+      this.seen = new Uint8Array(w * h);
       this.name = level.name;
       this.startAngle = (level.startAngleDeg || 0) * Math.PI / 180;
       G.Enemies.reset();        // после установки размеров: буферы потока зависят от w*h
@@ -166,7 +168,7 @@
       if (this.cells[i] !== DOOR_CELL) return true;
       const d = this.doors[this.doorAt[i]];
       if (d.key !== 0 || d.secret) return false;
-      if (d.state === CLOSED || d.state === CLOSING) d.state = OPENING;
+      if (d.state === CLOSED || d.state === CLOSING) { d.state = OPENING; G.Audio.play('dooropen', d.x + 0.5, d.y + 0.5); }
       return d.open >= DOOR.passable;
     },
 
@@ -191,7 +193,7 @@
             d.timer -= dt;
             if (d.timer <= 0) {
               if (this.occupied(d, px, py)) d.timer = 0.5;   // не закрываемся на игроке
-              else d.state = CLOSING;
+              else { d.state = CLOSING; G.Audio.play('doorclose', d.x + 0.5, d.y + 0.5); }
             }
             break;
           case CLOSING:
@@ -219,10 +221,12 @@
         const d = this.doors[this.doorAt[cy * this.w + cx]];
         if (d.key > 0 && !player.keys[d.key]) return 'Нужен ' + KEY_NAMES[d.key] + ' ключ';
         if (d.state === CLOSED || d.state === CLOSING) {
-          if (d.state === CLOSED && d.secret) { this.secretsFound++; }
+          if (d.state === CLOSED && d.secret) { this.secretsFound++; G.Audio.play('secret'); }
           d.state = OPENING;
+          G.Audio.play('dooropen', d.x + 0.5, d.y + 0.5);
         } else if (d.state === OPEN && !d.secret && !this.occupied(d, px, py)) {
           d.state = CLOSING;
+          G.Audio.play('doorclose', d.x + 0.5, d.y + 0.5);
         }
         return null;
       }

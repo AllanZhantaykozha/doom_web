@@ -49,7 +49,7 @@
       const set = def.ai ? G.Sprites.enemies[def.sprite] : null;
       const hp = def.ai ? Math.round(def.hp * D.hp) : def.hp;
       const e = {
-        x, y, def, set,
+        ch, x, y, def, set,
         radius: def.radius, hp, maxHp: hp,
         tex: def.ai ? set.walk[0] : G.Sprites.items.dummy, size: def.size, z: 0,
         active: true,        // рисуется и обновляется
@@ -119,6 +119,7 @@
       G.Map.killsFound += e.ai ? 1 : 0;
       if (!e.ai) {
         e.deadTimer = 1.5;
+        G.Audio.play('edeath', e.x, e.y, 0.5, 1.4);
         e.tex = G.Sprites.items.dummyDead;
         return;
       }
@@ -134,6 +135,10 @@
     },
 
     setState(e, st) {
+      // Звуки голоса по смене состояния (позиционные)
+      if (st === ALERT) G.Audio.play(e.def.boss ? 'roar' : 'alert', e.x, e.y, 1, e.def.voice);
+      else if (st === PAIN && e.ai && e.def.voice) G.Audio.play('epain', e.x, e.y, 1, e.def.voice);
+      else if (st === DEAD) G.Audio.play('edeath', e.x, e.y, 1, e.def.voice);
       e.state = st;
       e.stateTime = 0;
       e.fired = false;
@@ -365,6 +370,7 @@
           e.chargeHit = false;
           const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy) || 1;
           e.cdx = dx / d; e.cdy = dy / d;
+          G.Audio.play('roar', e.x, e.y, 0.8);
         }
         const step = a.speed * dt;
         const nx = e.x + e.cdx * step, ny = e.y + e.cdy * step;
@@ -392,21 +398,25 @@
       const dx = P.x - e.x, dy = P.y - e.y, dist = Math.hypot(dx, dy);
 
       if (a.type === 'melee') {
+        G.Audio.play('swing', e.x, e.y);
         if (dist <= e.radius + CFG.PLAYER.radius + 0.7) P.damage(dmg, e.x, e.y);
         return;
       }
       const base = Math.atan2(dy, dx);
       if (a.type === 'projectile') {
+        G.Audio.play('spit', e.x, e.y);
         G.Projectiles.spawnBolt(e.x, e.y, base, a.speed, dmg);
         return;
       }
-      if (a.type === 'fan') {                          // веер снарядов; в нём всегда есть просвет между шарами
+      if (a.type === 'fan') {
+        G.Audio.play('spit', e.x, e.y, 1.2, 0.7);       // веер снарядов; в нём всегда есть просвет между шарами
         for (let i = 0; i < a.count; i++) {
           const ang = base + (a.count > 1 ? (i / (a.count - 1) - 0.5) * a.arc : 0);
           G.Projectiles.spawnBolt(e.x, e.y, ang, a.speed, (a.dmgMin + Math.floor(Math.random() * (a.dmgMax - a.dmgMin + 1))) * D.dmg);
         }
         return;
       }
+      G.Audio.play(e.def.voice < 0.6 ? 'blast' : 'eshot', e.x, e.y);
       // Хитскан: луч(и) с разбросом; попадание, если луч доходит до круга игрока раньше стены
       for (let k = 0; k < (a.pellets || 1); k++) {
         const ang = base + (Math.random() * 2 - 1) * a.spread;
