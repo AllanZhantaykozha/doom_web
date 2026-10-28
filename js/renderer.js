@@ -1,30 +1,8 @@
 // Raycasting-рендер напрямую в Uint32Array (ImageData).
-// Этап 0: стены без текстур (плоский цвет), пол/потолок — градиент по строкам.
+// Стены (DDA, текстуры, затенение), пол и потолок (floor casting), z-буфер.
 (function (G) {
   'use strict';
   const C = G.CONFIG.RENDER;
-
-  // Базовые цвета стен по типу 1..9 (r, g, b)
-  const WALL_RGB = [
-    null,
-    [150, 60, 55],   // 1
-    [70, 110, 160],  // 2
-    [80, 140, 80],   // 3
-    [160, 140, 70],  // 4
-    [130, 80, 150],  // 5
-    [60, 140, 140],  // 6
-    [150, 150, 150], // 7
-    [140, 100, 60],  // 8
-    [100, 100, 120]  // 9
-  ];
-  const LITTLE_ENDIAN = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
-
-  // Упаковка в 32 бита под порядок байт платформы (ImageData хранит RGBA побайтно).
-  function pack(r, g, b) {
-    return LITTLE_ENDIAN
-      ? ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0
-      : ((r << 24) | (g << 16) | (b << 8) | 255) >>> 0;
-  }
 
   const Renderer = G.Renderer = {
     canvas: null, ctx: null,
@@ -32,7 +10,8 @@
     image: null, buf: null,
     zbuf: null,          // перпендикулярное расстояние до стены по столбцам (для спрайтов)
     camX: null,          // координата столбца в [-1, 1], предрасчёт
-    rowColor: null,      // цвет пола/потолка для каждой строки
+    rowDist: null,       // расстояние до пола на строке y (только y >= h/2)
+    rowLevel: null,      // уровень яркости пола/потолка на строке y
     tanHalfFov: 0,
     spritesDrawn: 0,     // для отладочного оверлея
 
@@ -58,26 +37,24 @@
       this.camX = new Float32Array(w);
       for (let x = 0; x < w; x++) this.camX[x] = 2 * (x + 0.5) / w - 1;
 
-      // Цвет строки: расстояние до точки пола на строке y (камера на высоте 0.5,
-      // стена высотой 1 занимает h/dist пикселей):  dist = 0.5*h / |y - h/2|.
-      // Яркость падает с расстоянием, так что у горизонта темнее.
-      this.rowColor = new Uint32Array(h);
-      const half = h / 2;
-      for (let y = 0; y < h; y++) {
-        const p = Math.abs(y + 0.5 - half);
-        const dist = (0.5 * h) / p;
-        const f = Math.max(C.minLight, 1 - dist / C.maxDist);
-        const base = y < half ? [70, 70, 90] : [75, 62, 50];  // потолок / пол
-        this.rowColor[y] = pack((base[0] * f) | 0, (base[1] * f) | 0, (base[2] * f) | 0);
+      // Расстояние до пола на строке y. Камера на высоте 0.5, стена высотой 1 занимает
+      // h/dist пикселей, поэтому точка пола на смещении p от горизонта лежит на
+      // перпендикулярном расстоянии dist = 0.5*h / p.
+      const half = h / 2, L = G.Textures.LIGHT_LEVELS - 1;
+      this.rowDist = new Float32Array(h);
+      this.rowLevel = new Uint8Array(h);
+      for (let y = Math.ceil(half); y < h; y++) {
+        const d = (0.5 * h) / (y + 0.5 - half);
+        this.rowDist[y] = d;
+        const f = Math.max(C.minLight, 1 - d / C.maxDist);
+        this.rowLevel[y] = (f * L) | 0;
       }
     },
 
     render(px, py, angle) {
       const w = this.w, h = this.h, buf = this.buf, zbuf = this.zbuf, camX = this.camX;
       const M = G.Map, cells = M.cells, mw = M.w, mh = M.h;
-
-      // 1. Фон: пол и потолок построчно (нативный fill быстрее цикла)
-      for (let y = 0; y < h; y++) buf.fill(this.rowColor[y], y * w, (y + 1) * w);
+      const T = G.Textures, L = T.LIGHT_LEVELS - 1;
 
       // Камера: dir — взгляд, plane — вектор «вправо» длиной tan(FOV/2).
       // Луч столбца = dir + plane*camX. Перпендикулярное расстояние до стены
@@ -85,6 +62,28 @@
       const dirX = Math.cos(angle), dirY = Math.sin(angle);
       const planeX = -dirY * this.tanHalfFov, planeY = dirX * this.tanHalfFov;
 
+      // 1. Пол и потолок. Для строки пола y мировая точка столбца x:
+      //    P = pos + rowDist * (dir + plane*camX[x]) — линейна по x, идём с постоянным шагом.
+      //    Потолок — зеркало: строка h-1-y использует те же текселы.
+      const half = h >> 1;
+      const floorSets = T.floor, ceilSets = T.ceil;
+      for (let y = half; y < h; y++) {
+        const rd = this.rowDist[y];
+        const lvl = this.rowLevel[y];
+        const ft = floorSets[lvl], ct = ceilSets[lvl];
+        let fx = (px + rd * (dirX + planeX * camX[0])) * 64;
+        let fy = (py + rd * (dirY + planeY * camX[0])) * 64;
+        const sx = rd * planeX * (2 / w) * 64, sy = rd * planeY * (2 / w) * 64;
+        let iF = y * w, iC = (h - 1 - y) * w;
+        for (let x = 0; x < w; x++) {
+          const ti = ((fy & 63) << 6) | (fx & 63);
+          buf[iF++] = ft[ti];
+          buf[iC++] = ct[ti];
+          fx += sx; fy += sy;
+        }
+      }
+
+      // 2. Стены (поверх пола/потолка)
       const maxDist = C.maxDist, minLight = C.minLight, sideShade = C.sideShadeY;
 
       for (let x = 0; x < w; x++) {
@@ -114,19 +113,32 @@
         if (dist < 0.0001) dist = 0.0001;
         zbuf[x] = dist;
 
-        const lineH = Math.floor(h / dist);
-        let y0 = (h - lineH) >> 1;
-        let y1 = y0 + lineH;
-        if (y0 < 0) y0 = 0;
-        if (y1 > h) y1 = h;
+        // Координата попадания вдоль грани стены -> столбец текстуры.
+        // Отражаем так, чтобы текстура не была зеркальной с обратных сторон.
+        let wallX = side === 0 ? py + dist * rayY : px + dist * rayX;
+        wallX -= Math.floor(wallX);
+        let texX = (wallX * 64) | 0;
+        if ((side === 0 && rayX > 0) || (side === 1 && rayY < 0)) texX = 63 - texX;
 
+        // Освещение: по расстоянию, стены вдоль Y темнее
         let f = 1 - dist / maxDist;
         if (f < minLight) f = minLight;
         if (side === 1) f *= sideShade;
-        const rgb = WALL_RGB[type] || WALL_RGB[1];
-        const col = pack((rgb[0] * f) | 0, (rgb[1] * f) | 0, (rgb[2] * f) | 0);
+        const tex = T.wallSet(type)[(f * L) | 0];
 
-        for (let y = y0, i = y0 * w + x; y < y1; y++, i += w) buf[i] = col;
+        const lineH = Math.floor(h / dist);
+        const yTop = (h - lineH) * 0.5;               // экранная Y верха стены (может быть < 0)
+        let y0 = Math.floor(yTop), y1 = y0 + lineH;
+        if (y0 < 0) y0 = 0;
+        if (y1 > h) y1 = h;
+
+        const step = 64 / lineH;                       // шаг по текстуре на пиксель экрана
+        let texPos = (y0 - yTop) * step;
+        const base = texX << 6;
+        for (let y = y0, i = y0 * w + x; y < y1; y++, i += w) {
+          buf[i] = tex[base + ((texPos | 0) & 63)];
+          texPos += step;
+        }
       }
 
       this.ctx.putImageData(this.image, 0, 0);

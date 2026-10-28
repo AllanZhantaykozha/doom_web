@@ -18,6 +18,7 @@
       this.dbgEl = document.getElementById('debug');
 
       G.Input.init(this.canvas);
+      G.Textures.init();
       G.Renderer.init(this.canvas);
       this.loadLevel(0);
 
