@@ -1,0 +1,48 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  font-family: "Courier New", monospace;
+  color: #ddd;
+}
+
+#screen {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain;          /* сохраняет пропорции, поля чёрные */
+  image-rendering: crisp-edges; /* запасной вариант для старых браузеров */
+  image-rendering: pixelated;
+}
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  cursor: pointer;
+  text-align: center;
+  user-select: none;
+}
+#overlay[hidden] { display: none; }
+#overlay h1 { font-size: 48px; letter-spacing: 8px; margin: 0 0 16px; color: #c33; }
+#overlay .hint { font-size: 22px; margin: 0 0 24px; }
+#overlay .keys { font-size: 14px; line-height: 1.7; color: #999; }
+
+#debug {
+  position: fixed;
+  left: 6px;
+  top: 6px;
+  margin: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #0f0;
+  background: rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+#debug[hidden] { display: none; }
