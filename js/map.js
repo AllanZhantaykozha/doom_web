@@ -5,7 +5,8 @@
 // Легенда ASCII:
 //   1..9 стены · . пусто · @ старт · X выход
 //   D дверь · R/B/Y красная/синяя/жёлтая дверь · S секретная стена
-//   r/b/y ключи · h/H аптечки · a броня · c обойма · s патроны к дробовику
+//   r/b/y ключи · h/H аптечки · a броня · c обойма · s патроны к дробовику · o ракета
+//   w дробовик · W автомат · x ракетница · t манекен-мишень
 (function (G) {
   'use strict';
   const DOOR = G.CONFIG.DOOR;
@@ -24,6 +25,7 @@
     startX: 1.5, startY: 1.5, startAngle: 0,
     name: '',
     itemsTotal: 0, itemsFound: 0,
+    killsTotal: 0, killsFound: 0,
     secretsTotal: 0, secretsFound: 0,
 
     load(level) {
@@ -36,7 +38,10 @@
 
       this.doors = [];
       this.itemsTotal = this.itemsFound = this.secretsTotal = this.secretsFound = 0;
+      this.killsTotal = this.killsFound = 0;
       G.Items.reset();
+      G.Enemies.reset();
+      G.Projectiles.reset();
 
       for (let y = 0; y < h; y++) {
         if (rows[y].length !== w) {
@@ -48,7 +53,7 @@
           if (ch >= '1' && ch <= '9') cells[y * w + x] = ch.charCodeAt(0) - 48;
           else if (ch === '@') { this.startX = x + 0.5; this.startY = y + 0.5; found = true; }
           else if (DOOR_KEY[ch] !== undefined || ch === 'S') { cells[y * w + x] = DOOR_CELL; specials.push(x, y, ch); }
-          else if (G.Items.has(ch)) specials.push(x, y, ch);
+          else if (G.Items.has(ch) || G.Enemies.has(ch)) specials.push(x, y, ch);
           // прочие символы — пустота
         }
       }
@@ -62,6 +67,7 @@
       for (let i = 0; i < specials.length; i += 3) {
         const x = specials[i], y = specials[i + 1], ch = specials[i + 2];
         if (cells[y * w + x] === DOOR_CELL) this.addDoor(x, y, ch);
+        else if (G.Enemies.has(ch)) G.Enemies.spawn(ch, x + 0.5, y + 0.5);
         else G.Items.spawn(ch, x + 0.5, y + 0.5);
       }
     },
@@ -108,6 +114,24 @@
              this.isSolid(Math.floor(x + r), Math.floor(y - r)) ||
              this.isSolid(Math.floor(x - r), Math.floor(y + r)) ||
              this.isSolid(Math.floor(x + r), Math.floor(y + r));
+    },
+
+    // Луч (dx, dy — единичный вектор) от точки до ближайшей твёрдой клетки.
+    // Возвращает расстояние или maxDist, если препятствий нет. Без аллокаций.
+    castRay(px, py, dx, dy, maxDist) {
+      let mx = Math.floor(px), my = Math.floor(py);
+      const ddx = dx === 0 ? 1e30 : Math.abs(1 / dx);
+      const ddy = dy === 0 ? 1e30 : Math.abs(1 / dy);
+      const stx = dx < 0 ? -1 : 1, sty = dy < 0 ? -1 : 1;
+      let sx = dx < 0 ? (px - mx) * ddx : (mx + 1 - px) * ddx;
+      let sy = dy < 0 ? (py - my) * ddy : (my + 1 - py) * ddy;
+      for (;;) {
+        let d;
+        if (sx < sy) { d = sx; sx += ddx; mx += stx; }
+        else { d = sy; sy += ddy; my += sty; }
+        if (d >= maxDist) return maxDist;
+        if (this.isSolid(mx, my)) return d;
+      }
     },
 
     // Стоит ли круг игрока в клетке двери (тогда её нельзя закрывать)

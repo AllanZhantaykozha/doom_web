@@ -23,6 +23,12 @@
       G.Input.init(this.canvas);
       G.Textures.init();
       G.Sprites.init();
+      G.Projectiles.init();
+      this.msgEl = document.getElementById('msg');
+
+      G.Input.init(this.canvas);
+      G.Textures.init();
+      G.Sprites.init();
       this.msgEl = document.getElementById('msg');
       this.hudEl = {
         hp: document.getElementById('hp'), ar: document.getElementById('ar'),
@@ -57,6 +63,13 @@
       G.Player.reset(G.Map.startX, G.Map.startY, G.Map.startAngle);
       G.Player.clearKeys();
       this.message(G.Map.name);
+      G.Player.dirty = true;
+    },
+
+    restart() {
+      G.Player.newGame();
+      this.loadLevel(this.levelIndex);
+      this.acc = 0;
     },
 
     // Переход по выходу. Последний уровень пока зацикливается (экран победы — этап 5).
@@ -68,19 +81,6 @@
     message(text) {
       this.msgEl.textContent = text;
       this.msgTimer = 2.5;
-    },
-
-    // Минимальный HUD в DOM: обновляется только при изменении данных
-    updateHud() {
-      const P = G.Player, H = this.hudEl;
-      H.hp.textContent = Math.ceil(P.health);
-      H.ar.textContent = Math.ceil(P.armor);
-      H.bu.textContent = P.ammo.bullets;
-      H.sh.textContent = P.ammo.shells;
-      H.k1.classList.toggle('on', P.keys[1]);
-      H.k2.classList.toggle('on', P.keys[2]);
-      H.k3.classList.toggle('on', P.keys[3]);
-      P.dirty = false;
     },
 
     showOverlay(v) { this.overlay.hidden = !v; },
@@ -139,11 +139,18 @@
           if (msg) this.message(msg);
         }
 
+        const wheel = G.Input.consumeWheel();
+        if (wheel !== 0) G.Player.cycleWeapon(wheel);
+        // Рестарт после смерти (экран смерти со статистикой — этап 5)
+        if (G.Player.dead && G.Input.wasPressed('Enter')) this.restart();
+
         this.acc += dt;
         while (this.acc >= CFG.STEP) {
           G.Player.update(CFG.STEP);
           G.Map.update(CFG.STEP, G.Player.x, G.Player.y);
           G.Items.update(G.Player.x, G.Player.y);
+          G.Enemies.update(CFG.STEP);
+          G.Projectiles.update(CFG.STEP);
           this.acc -= CFG.STEP;
           if (this.pendingExit) { this.nextLevel(); this.acc = 0; break; }
         }
@@ -152,7 +159,7 @@
           this.msgTimer -= dt;
           if (this.msgTimer <= 0) this.msgEl.textContent = '';
         }
-        if (G.Player.dirty) this.updateHud();
+
       }
 
       G.Renderer.render(G.Player.x, G.Player.y, G.Player.angle);
@@ -176,7 +183,8 @@
             'Разрешение: ' + R.w + 'x' + R.h + '\n' +
             'Спрайты: ' + R.spritesDrawn + '\n' +
             'Уровень: ' + G.Map.name + '  предметы ' + G.Map.itemsFound + '/' + G.Map.itemsTotal +
-            '  секреты ' + G.Map.secretsFound + '/' + G.Map.secretsTotal + '\n' +
+            '  секреты ' + G.Map.secretsFound + '/' + G.Map.secretsTotal +
+            '  цели ' + G.Map.killsFound + '/' + G.Map.killsTotal + '\n' +
             'Поз: ' + P.x.toFixed(2) + ', ' + P.y.toFixed(2) + '\n' +
             'Угол: ' + (P.angle * 180 / Math.PI).toFixed(0) + '°';
         }

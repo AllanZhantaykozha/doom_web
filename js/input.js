@@ -10,9 +10,11 @@
     down: new Set(),        // удерживаемые коды (KeyboardEvent.code)
     pressed: new Set(),     // нажатые с прошлого сброса (одиночные нажатия)
     mouseDX: 0,
+    mouseDown: false,
+    wheel: 0,
     locked: false,
     // Состояние геймпада (обновляется poll() раз за кадр рендера)
-    padMoveX: 0, padMoveY: 0, padTurn: 0, padRun: false,
+    padMoveX: 0, padMoveY: 0, padTurn: 0, padRun: false, padFire: false,
 
     init(canvas) {
       window.addEventListener('keydown', (e) => {
@@ -21,14 +23,19 @@
         this.down.add(e.code);
       });
       window.addEventListener('keyup', (e) => this.down.delete(e.code));
-      window.addEventListener('blur', () => this.down.clear());
+      window.addEventListener('blur', () => { this.down.clear(); this.mouseDown = false; });
 
       document.addEventListener('mousemove', (e) => {
         if (this.locked) this.mouseDX += e.movementX;
       });
+      document.addEventListener('mousedown', (e) => { if (this.locked && e.button === 0) this.mouseDown = true; });
+      document.addEventListener('mouseup', (e) => { if (e.button === 0) this.mouseDown = false; });
+      document.addEventListener('wheel', (e) => {
+        if (this.locked) this.wheel += Math.sign(e.deltaY);
+      }, { passive: true });
       document.addEventListener('pointerlockchange', () => {
         this.locked = document.pointerLockElement === canvas;
-        if (!this.locked) this.mouseDX = 0;
+        if (!this.locked) { this.mouseDX = 0; this.mouseDown = false; }
         if (this.onLockChange) this.onLockChange(this.locked);
       });
       this.canvas = canvas;
@@ -50,6 +57,12 @@
     wasPressed(code) { return this.pressed.has(code); },
     endFrame() { this.pressed.clear(); },
 
+    consumeWheel() {
+      const w = this.wheel;
+      this.wheel = 0;
+      return w;
+    },
+
     consumeMouse() {
       const d = this.mouseDX;
       this.mouseDX = 0;
@@ -60,6 +73,7 @@
     poll() {
       this.padMoveX = this.padMoveY = this.padTurn = 0;
       this.padRun = false;
+      this.padFire = false;
       if (!navigator.getGamepads) return;
       const pads = navigator.getGamepads();
       const dz = G.CONFIG.GAMEPAD_DEADZONE;
@@ -71,6 +85,7 @@
         this.padMoveY = -dead(p.axes[1]);   // вверх на стике = вперёд
         this.padTurn = dead(p.axes[2]);
         this.padRun = !!(p.buttons[10] && p.buttons[10].pressed); // нажатие левого стика
+        this.padFire = !!(p.buttons[7] && p.buttons[7].pressed);  // правый курок
         break;
       }
     }

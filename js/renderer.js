@@ -11,11 +11,15 @@
     zbuf: null,          // перпендикулярное расстояние до стены по столбцам (для спрайтов)
     camX: null,          // координата столбца в [-1, 1], предрасчёт
     rowDist: null,       // расстояние до пола на строке y (только y >= h/2)
-    rowLevel: null,      // уровень яркости пола/потолка на строке y
+    rowF: null,          // базовая яркость пола/потолка на строке y
+    vh: 0,               // высота 3D-вида (без нижней панели)
+    scale: 1,            // h / 200 — масштаб относительно базового разрешения
     tanHalfFov: 0,
     spritesDrawn: 0,     // для отладочного оверлея
     // Предвыделенные буферы списка спрайтов кадра (без аллокаций в горячем цикле)
     SPRITE_CAP: 512,
+    // Источники спрайтов: геттеры (списки пересоздаются при загрузке уровня)
+    sources: [() => G.Items.list, () => G.Enemies.list, () => G.Projectiles.list],
     sRef: new Array(512).fill(null),
     sDepth: new Float32Array(512),
     sTx: new Float32Array(512),
@@ -34,8 +38,12 @@
     setResolution(w, h) {
       this.w = w;
       this.h = h;
+      this.scale = h / 200;
+      const barH = Math.round(32 * this.scale);
+      this.vh = h - barH;                              // 3D-вид занимает всё над панелью
       this.canvas.width = w;
       this.canvas.height = h;
+      this.ctx.imageSmoothingEnabled = false;          // смена размера canvas сбрасывает состояние контекста
       this.image = this.ctx.createImageData(w, h);
       this.buf = new Uint32Array(this.image.data.buffer);
       this.zbuf = new Float32Array(w);
@@ -43,21 +51,22 @@
       for (let x = 0; x < w; x++) this.camX[x] = 2 * (x + 0.5) / w - 1;
 
       // Расстояние до пола на строке y. Камера на высоте 0.5, стена высотой 1 занимает
-      // h/dist пикселей, поэтому точка пола на смещении p от горизонта лежит на
-      // перпендикулярном расстоянии dist = 0.5*h / p.
-      const half = h / 2, L = G.Textures.LIGHT_LEVELS - 1;
-      this.rowDist = new Float32Array(h);
-      this.rowLevel = new Uint8Array(h);
-      for (let y = Math.ceil(half); y < h; y++) {
-        const d = (0.5 * h) / (y + 0.5 - half);
+      // vh/dist пикселей, поэтому точка пола на смещении p от горизонта лежит на
+      // перпендикулярном расстоянии dist = 0.5*vh / p.
+      const vh = this.vh, half = vh / 2;
+      this.rowDist = new Float32Array(vh);
+      this.rowF = new Float32Array(vh);
+      for (let y = Math.ceil(half); y < vh; y++) {
+        const d = (0.5 * vh) / (y + 0.5 - half);
         this.rowDist[y] = d;
-        const f = Math.max(C.minLight, 1 - d / C.maxDist);
-        this.rowLevel[y] = (f * L) | 0;
+        this.rowF[y] = Math.max(C.minLight, 1 - d / C.maxDist);
       }
+      G.Hud.resize(w, barH, this.scale);
     },
 
     render(px, py, angle) {
-      const w = this.w, h = this.h, buf = this.buf, zbuf = this.zbuf, camX = this.camX;
+      const w = this.w, h = this.vh, buf = this.buf, zbuf = this.zbuf, camX = this.camX;
+      const boost = G.Player.flash;                    // вспышка выстрела подсвечивает ближние поверхности
       const M = G.Map, cells = M.cells, mw = M.w, mh = M.h, doors = M.doors, doorAt = M.doorAt;
       const T = G.Textures, L = T.LIGHT_LEVELS - 1;
 
@@ -74,7 +83,9 @@
       const floorSets = T.floor, ceilSets = T.ceil;
       for (let y = half; y < h; y++) {
         const rd = this.rowDist[y];
-        const lvl = this.rowLevel[y];
+        let ff = this.rowF[y];
+        if (boost > 0 && rd < 12) { ff += boost * 0.6 * (1 - rd / 12); if (ff > 1) ff = 1; }
+        const lvl = (ff * L) | 0;
         const ft = floorSets[lvl], ct = ceilSets[lvl];
         let fx = (px + rd * (dirX + planeX * camX[0])) * 64;
         let fy = (py + rd * (dirY + planeY * camX[0])) * 64;
@@ -175,7 +186,9 @@
         // Освещение: по расстоянию, стены вдоль Y темнее
         let f = 1 - dist / maxDist;
         if (f < minLight) f = minLight;
+        if (boost > 0 && dist < 12) f += boost * 0.6 * (1 - dist / 12);
         if (side === 1) f *= sideShade;
+        if (f > 1) f = 1;
         const tex = texSet[(f * L) | 0];
 
         const lineH = Math.floor(h / dist);
@@ -194,15 +207,50 @@
       }
 
       this.drawSprites(px, py, dirX, dirY, planeX, planeY);
-      this.ctx.putImageData(this.image, 0, 0);
+      const ctx = this.ctx;
+      ctx.putImageData(this.image, 0, 0, 0, 0, w, h);   // только область 3D-вида
+      this.drawWeapon();
+      this.drawOverlays();
+      G.Hud.update();
+      ctx.drawImage(G.Hud.canvas, 0, h);
+    },
+
+    // Оружие внизу вида: целочисленный масштаб, покачивание при ходьбе, опускание при смене
+    drawWeapon() {
+      const P = G.Player;
+      if (P.dead) return;
+      const spr = G.Sprites.weapons[P.weapon][P.wFrame];
+      const sc = this.scale, size = 128 * sc;
+      const bx = Math.sin(P.bobPhase) * 6 * P.bobAmp * sc;
+      const by = Math.abs(Math.cos(P.bobPhase)) * 5 * P.bobAmp * sc;
+      const x = Math.round(this.w / 2 - size / 2 + bx);
+      const y = Math.round(this.vh - size + 4 * sc + by + P.wLower * size);
+      this.ctx.drawImage(spr, x, y, size, size);
+    },
+
+    // Экранные эффекты: красная вспышка при уроне, жёлтая при подборе, затемнение при смерти
+    drawOverlays() {
+      const P = G.Player, ctx = this.ctx, w = this.w, vh = this.vh;
+      if (P.hurtFlash > 0) {
+        ctx.globalAlpha = Math.min(0.6, P.hurtFlash * 0.6);
+        ctx.fillStyle = '#d01010'; ctx.fillRect(0, 0, w, vh);
+      }
+      if (P.pickupFlash > 0) {
+        ctx.globalAlpha = Math.min(0.35, P.pickupFlash * 0.5);
+        ctx.fillStyle = '#f0d040'; ctx.fillRect(0, 0, w, vh);
+      }
+      if (P.dead) {
+        ctx.globalAlpha = Math.min(0.85, P.deathTime * 0.5);
+        ctx.fillStyle = '#300000'; ctx.fillRect(0, 0, w, vh);
+      }
+      ctx.globalAlpha = 1;
     },
 
     // Спрайты: проекция в пространство камеры, сортировка от дальних к ближним,
     // построчная отрисовка столбцами с обрезкой по z-буферу стен.
     // Источник — любой объект с полями x, y, tex (Uint32Array 64x64 по столбцам), size, z, active.
     drawSprites(px, py, dirX, dirY, planeX, planeY) {
-      const w = this.w, h = this.h, buf = this.buf, zbuf = this.zbuf;
-      const items = G.Items.list;
+      const w = this.w, h = this.vh, buf = this.buf, zbuf = this.zbuf;
       const ref = this.sRef, depth = this.sDepth, tx = this.sTx;
       const tanHalf = this.tanHalfFov;
       let n = 0;
@@ -210,7 +258,10 @@
       // Преобразование в координаты камеры: invDet обращает матрицу [plane dir].
       // depth — расстояние вдоль взгляда, tx — смещение вправо (в тех же единицах).
       const invDet = 1 / (planeX * dirY - dirX * planeY);
-      for (let i = 0; i < items.length && n < this.SPRITE_CAP; i++) {
+      const lists = this.sources;
+      for (let li = 0; li < lists.length; li++) {
+        const items = lists[li]();
+        for (let i = 0; i < items.length && n < this.SPRITE_CAP; i++) {
         const it = items[i];
         if (!it.active) continue;
         const rx = it.x - px, ry = it.y - py;
@@ -219,6 +270,7 @@
         const tX = invDet * (dirY * rx - dirX * ry);
         if (Math.abs(tX) > ty * tanHalf + it.size) continue;   // вне поля зрения
         ref[n] = it; depth[n] = ty; tx[n] = tX; n++;
+        }
       }
 
       // Сортировка вставками по убыванию глубины (n мал; без аллокаций)

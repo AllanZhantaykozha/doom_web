@@ -14,6 +14,10 @@
     r: { sprite: 'keyR', size: 0.4, z: 0.12, pickup: (p) => { p.giveKey(1); return 'Красный ключ'; } },
     b: { sprite: 'keyB', size: 0.4, z: 0.12, pickup: (p) => { p.giveKey(2); return 'Синий ключ'; } },
     y: { sprite: 'keyY', size: 0.4, z: 0.12, pickup: (p) => { p.giveKey(3); return 'Жёлтый ключ'; } },
+    o: { sprite: 'rocketBox', size: 0.4, z: 0, pickup: (p) => p.addAmmo('rockets', 2) ? 'Ракеты (+2)' : null },
+    w: { sprite: 'wShotgun', size: 0.6, z: 0, pickup: (p) => p.giveWeapon(2, 'shells', 8) ? 'Дробовик!' : null },
+    W: { sprite: 'wChaingun', size: 0.6, z: 0, pickup: (p) => p.giveWeapon(3, 'bullets', 20) ? 'Автомат!' : null },
+    x: { sprite: 'wRocket', size: 0.6, z: 0, pickup: (p) => p.giveWeapon(4, 'rockets', 2) ? 'Ракетница!' : null },
     X: { sprite: 'exit', size: 0.8, z: 0, exit: true }
   };
 
@@ -51,6 +55,7 @@
           it.active = false;
           G.Map.itemsFound++;
           G.Player.dirty = true;
+          G.Player.pickupFlash = 0.6;
           G.Game.message(msg);
         }
       }

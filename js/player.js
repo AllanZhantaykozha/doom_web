@@ -13,6 +13,24 @@
     ammo: { bullets: 50, shells: 0, rockets: 0, cells: 0 },
     ammoMax: { bullets: 200, shells: 50, rockets: 50, cells: 300 },
     dirty: true,                          // HUD нужно перерисовать
+    dead: false, deathTime: 0,
+
+    // Оружие
+    weapon: 1,                            // индекс текущего оружия
+    weapons: [true, true, false, false, false],
+    wantWeapon: 1,
+    switching: 0,                         // 0 нет, 1 опускание, 2 подъём
+    wLower: 0,                            // 0 — поднято, 1 — полностью опущено
+    animating: false, wTime: 0, wShot: false, wFrame: 0, flip: 0,
+    heat: 0,                              // нагрев автомата (рост разброса)
+    flash: 0,                             // вспышка выстрела, освещающая сцену
+
+    // Кинематика и эффекты
+    kx: 0, ky: 0,                         // скорость отбрасывания
+    bobPhase: 0, bobAmp: 0,
+    hurtFlash: 0, pickupFlash: 0,
+    painTimer: 0, grinTimer: 0, lookTimer: 0, faceLook: 0,
+    glance: 0, glanceTimer: 1,
 
     reset(x, y, angle) {
       this.x = x;
@@ -25,6 +43,15 @@
       this.health = 100;
       this.armor = 0;
       this.ammo.bullets = 50; this.ammo.shells = 0; this.ammo.rockets = 0; this.ammo.cells = 0;
+      this.weapons[0] = this.weapons[1] = true;
+      this.weapons[2] = this.weapons[3] = this.weapons[4] = false;
+      this.weapon = this.wantWeapon = 1;
+      this.switching = 0; this.wLower = 0; this.animating = false; this.wFrame = 0;
+      this.heat = 0; this.flash = 0;
+      this.dead = false; this.deathTime = 0;
+      this.kx = this.ky = 0;
+      this.hurtFlash = this.pickupFlash = 0;
+      this.painTimer = this.grinTimer = this.lookTimer = 0;
       this.dirty = true;
     },
 
@@ -52,6 +79,156 @@
     },
     giveKey(k) { this.keys[k] = true; },
 
+    // Подбор оружия: новое оружие забирается сразу и берётся в руки; для имеющегося — только патроны
+    giveWeapon(idx, ammoType, amount) {
+      const had = this.weapons[idx];
+      this.weapons[idx] = true;
+      const gotAmmo = this.addAmmo(ammoType, amount);
+      if (!had) {
+        this.grinTimer = 1.5;
+        this.selectWeapon(idx);
+        return true;
+      }
+      return gotAmmo;
+    },
+
+    // Получение урона: броня поглощает долю, затем здоровье
+    damage(amount, srcX, srcY) {
+      if (this.dead || amount <= 0) return;
+      amount = Math.max(1, Math.round(amount));
+      const absorb = Math.min(this.armor, Math.floor(amount * G.CONFIG.ARMOR_ABSORB));
+      this.armor -= absorb;
+      this.health -= amount - absorb;
+      this.hurtFlash = Math.min(1, this.hurtFlash + amount / 40);
+      this.painTimer = amount >= 20 ? 0.6 : 0.3;
+      // Лицо смотрит на источник: знак угла между взглядом и направлением на источник
+      let rel = Math.atan2(srcY - this.y, srcX - this.x) - this.angle;
+      rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+      this.faceLook = Math.abs(rel) < 0.5 ? 0 : (rel > 0 ? 1 : -1);
+      this.lookTimer = 1.0;
+      this.dirty = true;
+      if (this.health <= 0) {
+        this.health = 0;
+        this.dead = true;
+        this.deathTime = 0;
+        G.Game.message('Вы погибли — Enter: заново');
+      }
+    },
+
+    push(vx, vy) { this.kx += vx; this.ky += vy; },
+
+    // ---- Оружие ----
+    selectWeapon(i) {
+      if (i < 0 || i >= this.weapons.length || !this.weapons[i]) return;
+      if (i === this.weapon && this.switching === 0) return;
+      if (i === this.wantWeapon && this.switching !== 0) return;
+      this.wantWeapon = i;
+      if (this.switching !== 1) this.switching = 1;
+      this.dirty = true;
+    },
+
+    cycleWeapon(dir) {
+      const n = this.weapons.length;
+      let i = this.wantWeapon;
+      for (let k = 0; k < n; k++) {
+        i = (i + dir + n) % n;
+        if (this.weapons[i]) { this.selectWeapon(i); return; }
+      }
+    },
+
+    hasAmmo(w) {
+      return w.ammo === null || this.ammo[w.ammo] >= w.cost;
+    },
+
+    // При пустом магазине берём лучшее оружие, на которое хватает патронов
+    autoSwitch() {
+      const W = G.CONFIG.WEAPONS;
+      for (let i = W.length - 1; i >= 0; i--) {
+        if (this.weapons[i] && this.hasAmmo(W[i])) { this.selectWeapon(i); return; }
+      }
+    },
+
+    // Выстрел — вызывается в момент fireAt анимации
+    executeFire(w) {
+      const C = G.CONFIG;
+      if (w.ammo !== null) { this.ammo[w.ammo] -= w.cost; this.dirty = true; }
+      if (w.kind === 'rocket') {
+        G.Projectiles.spawnRocket(this.x + Math.cos(this.angle) * 0.3, this.y + Math.sin(this.angle) * 0.3, this.angle);
+        this.flash = 1;
+        return;
+      }
+      let spread = w.spread;
+      if (w.heatSpread) {
+        spread += this.heat * w.heatSpread;
+        this.heat = Math.min(1, this.heat + w.heatPerShot);
+      }
+      for (let i = 0; i < w.pellets; i++) {
+        const a = this.angle + (Math.random() * 2 - 1) * spread;
+        const dmg = w.dmgMin + Math.floor(Math.random() * (w.dmgMax - w.dmgMin + 1));
+        G.Enemies.fireRay(this.x, this.y, a, w.range, dmg);
+      }
+      if (w.kind === 'hitscan') this.flash = 1;
+    },
+
+    updateWeapon(dt, trigger) {
+      const C = G.CONFIG, W = C.WEAPONS[this.weapon];
+
+      if (this.switching === 1) {
+        this.wLower += dt * C.WEAPON_SWITCH_SPEED;
+        if (this.wLower >= 1) {
+          this.wLower = 1;
+          this.weapon = this.wantWeapon;
+          this.animating = false; this.wFrame = 0;
+          this.switching = 2;
+          this.dirty = true;
+        }
+        return;
+      }
+      if (this.switching === 2) {
+        this.wLower -= dt * C.WEAPON_SWITCH_SPEED;
+        if (this.wLower <= 0) { this.wLower = 0; this.switching = 0; }
+        return;
+      }
+
+      // Нагрев автомата остывает, когда не стреляем
+      if (!this.animating && W.heatDecay) this.heat = Math.max(0, this.heat - W.heatDecay * dt);
+
+      if (!this.animating) {
+        if (trigger) {
+          if (this.hasAmmo(W)) { this.animating = true; this.wTime = 0; this.wShot = false; }
+          else this.autoSwitch();
+        }
+        return;
+      }
+
+      this.wTime += dt;
+      // Момент выстрела: начало записи fireAt
+      if (!this.wShot) {
+        let start = 0;
+        for (let i = 0; i < W.fireAt; i++) start += W.seq[i][1];
+        if (this.wTime >= start) {
+          this.wShot = true;
+          this.executeFire(W);
+          if (W.alt) this.flip ^= 1;
+        }
+      }
+      // Текущий кадр
+      let t = this.wTime, frame = 0, done = true;
+      for (let i = 0; i < W.seq.length; i++) {
+        if (t < W.seq[i][1]) { frame = W.seq[i][0]; done = false; break; }
+        t -= W.seq[i][1];
+      }
+      if (done) {
+        this.animating = false;
+        this.wFrame = 0;
+        if (!this.hasAmmo(W)) this.autoSwitch();
+      } else {
+        this.wFrame = (W.alt && frame === 1) ? 1 + this.flip : frame;
+      }
+    },
+
+    // Поворот вызывается
+
     // Поворот вызывается каждый кадр рендера (мышь) и каждый тик (стрелки/геймпад).
     turn(delta) {
       this.angle += delta;
@@ -61,7 +238,31 @@
 
     // Один тик логики (dt = G.CONFIG.STEP).
     update(dt) {
-      const In = G.Input;
+      const In = G.Input, C = G.CONFIG;
+
+      // Таймеры эффектов
+      if (this.flash > 0) this.flash = Math.max(0, this.flash - dt / 0.1);
+      if (this.hurtFlash > 0) this.hurtFlash = Math.max(0, this.hurtFlash - dt * 1.5);
+      if (this.pickupFlash > 0) this.pickupFlash = Math.max(0, this.pickupFlash - dt * 1.5);
+      if (this.painTimer > 0) this.painTimer -= dt;
+      if (this.grinTimer > 0) this.grinTimer -= dt;
+      if (this.lookTimer > 0) this.lookTimer -= dt;
+      this.glanceTimer -= dt;
+      if (this.glanceTimer <= 0) {                       // случайные взгляды лица
+        this.glance = Math.floor(Math.random() * 3) - 1;
+        this.glanceTimer = 0.6 + Math.random() * 1.4;
+      }
+
+      if (this.dead) {
+        this.deathTime += dt;
+        this.kx = this.ky = 0;
+        return;
+      }
+
+      // Выбор оружия 1–5
+      for (let i = 0; i < 5; i++) if (In.wasPressed('Digit' + (i + 1))) this.selectWeapon(i);
+      const trigger = In.isDown('ControlLeft') || In.isDown('ControlRight') || In.mouseDown || In.padFire;
+      this.updateWeapon(dt, trigger);
 
       // Поворот стрелками / правым стиком
       let turn = 0;
@@ -80,21 +281,36 @@
       str += In.padMoveX;
 
       const len = Math.hypot(fwd, str);
-      if (len === 0) return;
-      if (len > 1) { fwd /= len; str /= len; }  // диагональ не быстрее прямой
-
       const run = In.isDown('ShiftLeft') || In.isDown('ShiftRight') || In.padRun;
-      const speed = (run ? P.runSpeed : P.walkSpeed) * dt;
+      const M = G.Map, E = G.Enemies, r = P.radius;
 
-      // Вектор взгляда (cos, sin); «вправо» в системе с осью Y вниз — (-sin, cos).
-      const c = Math.cos(this.angle), s = Math.sin(this.angle);
-      const dx = (c * fwd - s * str) * speed;
-      const dy = (s * fwd + c * str) * speed;
+      let dx = 0, dy = 0;
+      if (len > 0) {
+        if (len > 1) { fwd /= len; str /= len; }         // диагональ не быстрее прямой
+        const speed = (run ? P.runSpeed : P.walkSpeed) * dt;
+        // Вектор взгляда (cos, sin); «вправо» в системе с осью Y вниз — (-sin, cos).
+        const c = Math.cos(this.angle), s = Math.sin(this.angle);
+        dx = (c * fwd - s * str) * speed;
+        dy = (s * fwd + c * str) * speed;
+      }
 
-      // Скольжение: оси проверяются раздельно, заблокированная ось просто не двигается.
-      const M = G.Map;
-      if (!M.blocked(this.x + dx, this.y, P.radius)) this.x += dx;
-      if (!M.blocked(this.x, this.y + dy, P.radius)) this.y += dy;
+      // Отбрасывание (взрывы): затухающая скорость, складывается с намерением
+      if (this.kx !== 0 || this.ky !== 0) {
+        dx += this.kx * dt; dy += this.ky * dt;
+        const fr = Math.max(0, 1 - C.KNOCK_FRICTION * dt);
+        this.kx *= fr; this.ky *= fr;
+        if (Math.abs(this.kx) < 0.01) this.kx = 0;
+        if (Math.abs(this.ky) < 0.01) this.ky = 0;
+      }
+
+      // Скольжение: оси проверяются раздельно; враги тоже блокируют движение
+      if (dx !== 0 && !M.blocked(this.x + dx, this.y, r) && !E.blocked(this.x + dx, this.y, r)) this.x += dx;
+      if (dy !== 0 && !M.blocked(this.x, this.y + dy, r) && !E.blocked(this.x, this.y + dy, r)) this.y += dy;
+
+      // Покачивание оружия: амплитуда плавно растёт при ходьбе
+      const target = len > 0 ? (run ? 1.3 : 1) : 0;
+      this.bobAmp += (target - this.bobAmp) * Math.min(1, dt * 8);
+      this.bobPhase += dt * (run ? 12 : 9) * this.bobAmp;
     }
   };
 })(window.GAME);
