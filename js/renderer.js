@@ -224,7 +224,7 @@
       const bx = Math.sin(P.bobPhase) * 6 * P.bobAmp * sc;
       const by = Math.abs(Math.cos(P.bobPhase)) * 5 * P.bobAmp * sc;
       const x = Math.round(this.w / 2 - size / 2 + bx);
-      const y = Math.round(this.vh - size + 4 * sc + by + P.wLower * size);
+      const y = Math.round(this.vh - size + 1 * sc + by + P.wLower * size);
       this.ctx.drawImage(spr, x, y, size, size);
     },
 
@@ -238,6 +238,22 @@
       if (P.pickupFlash > 0) {
         ctx.globalAlpha = Math.min(0.35, P.pickupFlash * 0.5);
         ctx.fillStyle = '#f0d040'; ctx.fillRect(0, 0, w, vh);
+      }
+      if (P.invuln > 0 && (P.invuln > 3 || ((P.invuln * 6) | 0) % 2 === 0)) {   // мигает в последние 3 с
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = '#9ff'; ctx.fillRect(0, 0, w, vh);
+      }
+      if (P.quad > 0) {
+        ctx.globalAlpha = 0.1;
+        ctx.fillStyle = '#ff6a10'; ctx.fillRect(0, 0, w, vh);
+      }
+      const B = G.Enemies.boss;
+      if (B && B.alive && B.state !== G.Enemies.IDLE) {          // полоска здоровья босса
+        const sc = this.scale, bw = Math.round(w * 0.5), bx = Math.round((w - bw) / 2), by = Math.round(5 * sc), bh = Math.max(3, Math.round(4 * sc));
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#000'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+        ctx.fillStyle = '#5a1010'; ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = B.phase === 2 ? '#ffb020' : '#d02020'; ctx.fillRect(bx, by, Math.round(bw * Math.max(0, B.hp) / B.maxHp), bh);
       }
       if (P.dead) {
         ctx.globalAlpha = Math.min(0.85, P.deathTime * 0.5);

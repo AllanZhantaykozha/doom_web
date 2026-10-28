@@ -14,6 +14,7 @@
     ammoMax: { bullets: 200, shells: 50, rockets: 50, cells: 300 },
     dirty: true,                          // HUD нужно перерисовать
     dead: false, deathTime: 0,
+    invuln: 0, quad: 0,                   // сферы: оставшееся время, с
 
     // Оружие
     weapon: 1,                            // индекс текущего оружия
@@ -49,15 +50,17 @@
       this.switching = 0; this.wLower = 0; this.animating = false; this.wFrame = 0;
       this.heat = 0; this.flash = 0;
       this.dead = false; this.deathTime = 0;
+      this.invuln = 0; this.quad = 0;
       this.kx = this.ky = 0;
       this.hurtFlash = this.pickupFlash = 0;
       this.painTimer = this.grinTimer = this.lookTimer = 0;
       this.dirty = true;
     },
 
-    // Ключи действуют в пределах уровня
-    clearKeys() {
+    // Начало уровня: ключи и временные сферы действуют только в пределах уровня
+    startLevel() {
       this.keys.fill(false);
+      this.invuln = 0; this.quad = 0;
       this.dirty = true;
     },
 
@@ -94,7 +97,7 @@
 
     // Получение урона: броня поглощает долю, затем здоровье
     damage(amount, srcX, srcY) {
-      if (this.dead || amount <= 0) return;
+      if (this.dead || amount <= 0 || this.invuln > 0) return;
       amount = Math.max(1, Math.round(amount));
       const absorb = Math.min(this.armor, Math.floor(amount * G.CONFIG.ARMOR_ABSORB));
       this.armor -= absorb;
@@ -111,7 +114,7 @@
         this.health = 0;
         this.dead = true;
         this.deathTime = 0;
-        G.Game.message('Вы погибли — Enter: заново');
+        G.Game.message('Вы погибли');
       }
     },
 
@@ -152,9 +155,11 @@
     executeFire(w) {
       const C = G.CONFIG;
       if (w.ammo !== null) { this.ammo[w.ammo] -= w.cost; this.dirty = true; }
+      const mul = this.quad > 0 ? C.SPHERE.quadMul : 1;     // сфера ярости
       if (w.noise) G.Enemies.noise(this.x, this.y, w.noise);   // выстрел будит врагов поблизости
       if (w.kind === 'rocket') {
-        G.Projectiles.spawnRocket(this.x + Math.cos(this.angle) * 0.3, this.y + Math.sin(this.angle) * 0.3, this.angle);
+        G.Projectiles.spawnRocket(this.x + Math.cos(this.angle) * 0.3, this.y + Math.sin(this.angle) * 0.3, this.angle,
+          C.ROCKET.damage * mul);
         this.flash = 1;
         return;
       }
@@ -165,7 +170,7 @@
       }
       for (let i = 0; i < w.pellets; i++) {
         const a = this.angle + (Math.random() * 2 - 1) * spread;
-        const dmg = w.dmgMin + Math.floor(Math.random() * (w.dmgMax - w.dmgMin + 1));
+        const dmg = (w.dmgMin + Math.floor(Math.random() * (w.dmgMax - w.dmgMin + 1))) * mul;
         G.Enemies.fireRay(this.x, this.y, a, w.range, dmg);
       }
       if (w.kind === 'hitscan') this.flash = 1;
@@ -242,6 +247,8 @@
       const In = G.Input, C = G.CONFIG;
 
       // Таймеры эффектов
+      if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - dt);
+      if (this.quad > 0) this.quad = Math.max(0, this.quad - dt);
       if (this.flash > 0) this.flash = Math.max(0, this.flash - dt / 0.1);
       if (this.hurtFlash > 0) this.hurtFlash = Math.max(0, this.hurtFlash - dt * 1.5);
       if (this.pickupFlash > 0) this.pickupFlash = Math.max(0, this.pickupFlash - dt * 1.5);

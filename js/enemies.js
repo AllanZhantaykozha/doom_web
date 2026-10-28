@@ -18,6 +18,7 @@
     flow: null, flowCell: -1, flowTimer: 0,
     queue: null, sound: null, noiseCool: 0,
     spawnAcc: 0,
+    boss: null,            // ссылка на босса уровня (для полоски здоровья)
 
     has(ch) { return CFG.ENEMIES[ch] !== undefined; },
 
@@ -31,21 +32,23 @@
       }
       this.flowCell = -1;
       this.flowTimer = 0;
+      this.boss = null;
       // Доля враждебных существ по сложности: накопитель распределяет пропуски равномерно
       this.spawnAcc = 1 - CFG.DIFFICULTY[CFG.difficulty].count;
     },
 
-    spawn(ch, x, y) {
+    // force — враг не пропускается сложностью (призванное подкрепление). Возвращает созданного врага или null.
+    spawn(ch, x, y, force) {
       const def = CFG.ENEMIES[ch];
       const D = CFG.DIFFICULTY[CFG.difficulty];
-      if (def.ai) {
+      if (def.ai && !force && !def.boss) {
         this.spawnAcc += D.count;
-        if (this.spawnAcc < 1) return;                 // этот враг пропущен сложностью
+        if (this.spawnAcc < 1) return null;            // этот враг пропущен сложностью
         this.spawnAcc -= 1;
       }
       const set = def.ai ? G.Sprites.enemies[def.sprite] : null;
       const hp = def.ai ? Math.round(def.hp * D.hp) : def.hp;
-      this.list.push({
+      const e = {
         x, y, def, set,
         radius: def.radius, hp, maxHp: hp,
         tex: def.ai ? set.walk[0] : G.Sprites.items.dummy, size: def.size, z: 0,
@@ -55,9 +58,14 @@
         state: IDLE, stateTime: 0, think: Math.random() * 0.3, sees: false, sightTimer: Math.random() * 0.2,
         animTime: 0, moved: false, attackCool: 0, fired: false,
         hurtTimer: 0, deadTimer: 0,
-        kx: 0, ky: 0         // скорость отбрасывания, клеток/с
-      });
+        kx: 0, ky: 0,        // скорость отбрасывания, клеток/с
+        atk: def.attack || null,   // текущая атака (у босса выбирается из набора фазы)
+        phase: 0, speedMul: 1, roar: 0, cdx: 0, cdy: 0, chargeHit: false
+      };
+      this.list.push(e);
       if (def.ai) G.Map.killsTotal++;
+      if (def.boss) this.boss = e;
+      return e;
     },
 
     // ---------- Урон, смерть ----------
@@ -71,9 +79,39 @@
         return;
       }
       if (e.hp <= 0) { this.die(e); return; }
+      if (e.def.phases && this.checkPhase(e)) return;
       // Любое попадание будит врага; боль прерывает атаку с вероятностью painChance
       if (e.state === IDLE || e.state === ALERT) this.setState(e, CHASE);
       if (Math.random() < e.def.painChance && e.state !== PAIN) this.setState(e, PAIN);
+    },
+
+    // Переход босса в следующую фазу по доле здоровья: рёв (оглушение), ускорение, призыв, смена спрайта
+    checkPhase(e) {
+      const ph = e.def.phases, f = e.hp / e.maxHp;
+      let n = 0;
+      for (let i = 1; i < ph.length; i++) if (f <= ph[i].hpFrac) n = i;
+      if (n <= e.phase) return false;
+      e.phase = n;
+      const P = ph[n];
+      e.speedMul = P.speedMul;
+      if (P.sprite) e.set = G.Sprites.enemies[P.sprite];
+      if (P.summon) for (let i = 0; i < P.summon.length; i++) this.summon(e, P.summon[i], i);
+      this.setState(e, PAIN);
+      e.roar = 0.9;
+      G.Game.message(e.def.name + ' в ярости!');
+      return true;
+    },
+
+    // Призыв: ставит врага рядом с боссом в первой свободной точке вокруг него
+    summon(boss, ch, idx) {
+      for (let k = 0; k < 8; k++) {
+        const a = (idx * 3 + k) * Math.PI / 4;
+        const x = boss.x + Math.cos(a) * 1.8, y = boss.y + Math.sin(a) * 1.8;
+        if (G.Map.blocked(x, y, 0.35) || this.blocked(x, y, 0.35)) continue;
+        const m = this.spawn(ch, x, y, true);
+        if (m) { m.state = CHASE; m.sees = true; }
+        return;
+      }
     },
 
     die(e) {
@@ -85,10 +123,12 @@
         return;
       }
       this.setState(e, DEAD);
+      if (e.def.boss) G.Game.onBossDefeated();
       if (e.def.drop) G.Items.spawn(e.def.drop, e.x, e.y, true);
     },
 
     push(e, vx, vy) {
+      if (e.def.boss) return;                        // босса не отбросить
       e.kx += vx;
       e.ky += vy;
     },
@@ -266,7 +306,7 @@
           this.attack(e, dt);
           break;
         case PAIN:
-          if (e.stateTime >= PAIN_TIME) this.setState(e, CHASE);
+          if (e.stateTime >= (e.roar || PAIN_TIME)) { e.roar = 0; this.setState(e, CHASE); }
           break;
       }
       this.animate(e, dt);
@@ -283,8 +323,10 @@
       e.think -= dt;
       if (e.think <= 0) {
         e.think = 0.2 + Math.random() * 0.25;
-        const reach = a.type === 'melee' ? e.radius + CFG.PLAYER.radius + 0.5 : a.range;
+        const pick = def.phases ? def.phases[e.phase].attacks[(Math.random() * def.phases[e.phase].attacks.length) | 0] : a;
+        const reach = pick.type === 'melee' ? e.radius + CFG.PLAYER.radius + 0.5 : pick.range;
         if (e.attackCool <= 0 && dist <= reach && e.sees && Math.random() < def.attackChance) {
+          e.atk = pick;
           this.setState(e, ATTACK);
           return;
         }
@@ -293,7 +335,7 @@
       // Стрелки останавливаются на дистанции, пока видят игрока
       if (e.sees && dist < def.keepDist) return;
 
-      const step = def.speed * dt;
+      const step = def.speed * e.speedMul * dt;
       let moved;
       if (e.sees && dist < 6) moved = this.moveToward(e, P.x, P.y, step);          // прямая видимость — идём напрямую
       else if (this.flowNext(e)) moved = this.moveToward(e, this._nx, this._ny, step);
@@ -302,12 +344,42 @@
     },
 
     attack(e, dt) {
-      const a = e.def.attack;
+      const a = e.atk, P = G.Player;
+      if (a.type === 'charge') { this.charge(e, a, dt); return; }
       if (!e.fired && e.stateTime >= a.windup) {
         e.fired = true;
         this.fire(e, a);
       }
       if (e.stateTime >= a.windup + a.recover) {
+        e.attackCool = a.cooldown;
+        this.setState(e, CHASE);
+      }
+    },
+
+    // Таран босса: замах (предупреждение), затем рывок по прямой в зафиксированном направлении
+    charge(e, a, dt) {
+      const P = G.Player, M = G.Map, t = e.stateTime;
+      if (t >= a.windup && t < a.windup + a.duration) {
+        if (!e.fired) {
+          e.fired = true;
+          e.chargeHit = false;
+          const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy) || 1;
+          e.cdx = dx / d; e.cdy = dy / d;
+        }
+        const step = a.speed * dt;
+        const nx = e.x + e.cdx * step, ny = e.y + e.cdy * step;
+        let moved = false;
+        if (!M.blocked(nx, e.y, e.radius)) { e.x = nx; moved = true; }
+        if (!M.blocked(e.x, ny, e.radius)) { e.y = ny; moved = true; }
+        if (!moved) e.stateTime = a.windup + a.duration;                   // упёрся — рывок окончен
+        if (!e.chargeHit && !P.dead && Math.hypot(P.x - e.x, P.y - e.y) < e.radius + CFG.PLAYER.radius + 0.2) {
+          e.chargeHit = true;
+          const D = CFG.DIFFICULTY[CFG.difficulty];
+          P.damage((a.dmgMin + Math.floor(Math.random() * (a.dmgMax - a.dmgMin + 1))) * D.dmg, e.x, e.y);
+          P.push(e.cdx * 7, e.cdy * 7);
+        }
+      }
+      if (t >= a.windup + a.duration + a.recover) {
         e.attackCool = a.cooldown;
         this.setState(e, CHASE);
       }
@@ -328,21 +400,30 @@
         G.Projectiles.spawnBolt(e.x, e.y, base, a.speed, dmg);
         return;
       }
-      // Хитскан: луч с разбросом; попадание, если луч доходит до круга игрока раньше стены
-      const ang = base + (Math.random() * 2 - 1) * a.spread;
-      const ux = Math.cos(ang), uy = Math.sin(ang);
-      const wallD = G.Map.castRay(e.x, e.y, ux, uy, a.range);
-      const t = dx * ux + dy * uy;
-      const perp = Math.abs(dx * uy - dy * ux);
-      if (t > 0 && t < wallD && perp < CFG.PLAYER.radius + 0.1) P.damage(dmg, e.x, e.y);
-      else if (wallD < a.range) G.Projectiles.effect(G.Projectiles.PUFF, e.x + ux * (wallD - 0.06), e.y + uy * (wallD - 0.06), 0.3);
+      if (a.type === 'fan') {                          // веер снарядов; в нём всегда есть просвет между шарами
+        for (let i = 0; i < a.count; i++) {
+          const ang = base + (a.count > 1 ? (i / (a.count - 1) - 0.5) * a.arc : 0);
+          G.Projectiles.spawnBolt(e.x, e.y, ang, a.speed, (a.dmgMin + Math.floor(Math.random() * (a.dmgMax - a.dmgMin + 1))) * D.dmg);
+        }
+        return;
+      }
+      // Хитскан: луч(и) с разбросом; попадание, если луч доходит до круга игрока раньше стены
+      for (let k = 0; k < (a.pellets || 1); k++) {
+        const ang = base + (Math.random() * 2 - 1) * a.spread;
+        const ux = Math.cos(ang), uy = Math.sin(ang);
+        const wallD = G.Map.castRay(e.x, e.y, ux, uy, a.range);
+        const t = dx * ux + dy * uy;
+        const perp = Math.abs(dx * uy - dy * ux);
+        if (t > 0 && t < wallD && perp < CFG.PLAYER.radius + 0.1) P.damage(dmg, e.x, e.y);
+        else if (wallD < a.range) G.Projectiles.effect(G.Projectiles.PUFF, e.x + ux * (wallD - 0.06), e.y + uy * (wallD - 0.06), 0.3);
+      }
     },
 
     // Выбор кадра по состоянию
     animate(e, dt) {
       const set = e.set;
       switch (e.state) {
-        case ATTACK: e.tex = set.atk[e.fired ? 1 : 0]; break;
+        case ATTACK: e.tex = set.atk[e.fired ? 1 : 0]; break;   // у тарана «fired» = рывок идёт
         case PAIN: e.tex = set.pain; break;
         case DEAD: {
           const f = Math.min(4, Math.floor(e.stateTime / DEATH_FRAME));

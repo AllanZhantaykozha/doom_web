@@ -18,6 +18,8 @@
     w: { sprite: 'wShotgun', size: 0.6, z: 0, pickup: (p) => p.giveWeapon(2, 'shells', 8) ? 'Дробовик!' : null },
     W: { sprite: 'wChaingun', size: 0.6, z: 0, pickup: (p) => p.giveWeapon(3, 'bullets', 20) ? 'Автомат!' : null },
     x: { sprite: 'wRocket', size: 0.6, z: 0, pickup: (p) => p.giveWeapon(4, 'rockets', 2) ? 'Ракетница!' : null },
+    i: { sprite: 'sphereI', size: 0.45, z: 0.1, pickup: (p) => { p.invuln = C.SPHERE.invuln; return 'Сфера неуязвимости!'; } },
+    d: { sprite: 'sphereD', size: 0.45, z: 0.1, pickup: (p) => { p.quad = C.SPHERE.quad; return 'Сфера ярости: урон ×' + C.SPHERE.quadMul + '!'; } },
     X: { sprite: 'exit', size: 0.8, z: 0, exit: true }
   };
 

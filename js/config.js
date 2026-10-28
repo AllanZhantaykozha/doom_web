@@ -75,9 +75,26 @@
       k: { name: 'Бастион', sprite: 'bulwark', ai: true, hp: 160, radius: 0.38, size: 1.15, speed: 0.95, painChance: 0.15,
            reaction: 0.6, sight: 22, keepDist: 3.5, attackChance: 0.8, drop: 'a',
            attack: { type: 'hitscan', range: 14, windup: 0.7, recover: 0.5, cooldown: 1.9, dmgMin: 15, dmgMax: 30, spread: 0.07 } },
+      Z: { name: 'Гнилой страж', sprite: 'warden', ai: true, boss: true, hp: 700, radius: 0.5, size: 1.0, speed: 1.1,
+           painChance: 0.04, reaction: 0.8, sight: 40, keepDist: 5, attackChance: 1.0, drop: null,
+           // Фазы по доле оставшегося здоровья; в каждой — свой набор атак. summon — подкрепление при входе в фазу.
+           phases: [
+             { hpFrac: 1.0, speedMul: 1.0, attacks: [
+               { type: 'hitscan', range: 22, windup: 0.6, recover: 0.5, cooldown: 1.1, dmgMin: 10, dmgMax: 18, spread: 0.1, pellets: 3 },
+               { type: 'fan', range: 22, count: 5, arc: 0.8, speed: 5, windup: 0.7, recover: 0.6, cooldown: 1.3, dmgMin: 10, dmgMax: 16 } ] },
+             { hpFrac: 0.66, speedMul: 1.35, summon: ['f', 'f'], attacks: [
+               { type: 'hitscan', range: 22, windup: 0.5, recover: 0.4, cooldown: 0.9, dmgMin: 10, dmgMax: 18, spread: 0.1, pellets: 3 },
+               { type: 'fan', range: 22, count: 7, arc: 1.1, speed: 5.5, windup: 0.6, recover: 0.5, cooldown: 1.1, dmgMin: 10, dmgMax: 16 },
+               { type: 'charge', range: 9, windup: 0.6, duration: 0.8, speed: 7, recover: 0.7, cooldown: 1.8, dmgMin: 25, dmgMax: 40 } ] },
+             { hpFrac: 0.33, speedMul: 1.9, summon: ['e', 'p'], sprite: 'warden2', attacks: [
+               { type: 'hitscan', range: 22, windup: 0.4, recover: 0.35, cooldown: 0.7, dmgMin: 10, dmgMax: 18, spread: 0.12, pellets: 4 },
+               { type: 'fan', range: 22, count: 9, arc: 1.4, speed: 6, windup: 0.5, recover: 0.45, cooldown: 0.9, dmgMin: 10, dmgMax: 16 },
+               { type: 'charge', range: 10, windup: 0.45, duration: 0.9, speed: 8.5, recover: 0.5, cooldown: 1.3, dmgMin: 25, dmgMax: 40 } ] }
+           ] },
       t: { name: 'Манекен', sprite: 'dummy', ai: false, hp: 60, radius: 0.3, size: 0.9 }
     },
 
+    SPHERE: { invuln: 12, quad: 25, quadMul: 3 },   // длительность сфер, с; множитель урона
     PICKUP_RADIUS: 0.5,
     USE_REACH: 1.5,
 

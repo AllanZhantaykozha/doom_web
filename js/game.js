@@ -1,45 +1,44 @@
-// Главный цикл: fixed timestep (accumulator) + requestAnimationFrame.
+// Главный цикл (fixed timestep + requestAnimationFrame) и состояния игры.
+// state: 'running' — идёт игра · 'paused' — пауза · 'screen' — экран (смерть / итоги уровня / победа)
 (function (G) {
   'use strict';
   const CFG = G.CONFIG;
 
+  const emptyStats = () => ({ kills: 0, killsTotal: 0, items: 0, itemsTotal: 0, secrets: 0, secretsTotal: 0, time: 0 });
+
   const Game = G.Game = {
-    state: 'paused',     // 'running' | 'paused'
+    state: 'paused',
+    screen: null,
     acc: 0,
     last: 0,
     resIndex: 0,
     debug: false,
     levelIndex: 0,
+    levelTime: 0,
+    run: emptyStats(),       // накопленная статистика забега (для экрана победы)
     pendingExit: false,
+    bossTimer: 0,            // обратный отсчёт до победы после гибели босса
     msgTimer: 0,
+    statusKey: -1,
     // Статистика для отладочного оверлея
-    frameMs: 0, fps: 0, fpsFrames: 0, fpsTime: 0, dbgTime: 0,
+    frameMs: 0, fps: 0, fpsFrames: 0, fpsTime: 0,
 
     init() {
       this.canvas = document.getElementById('screen');
       this.overlay = document.getElementById('overlay');
       this.dbgEl = document.getElementById('debug');
+      this.msgEl = document.getElementById('msg');
+      this.statusEl = document.getElementById('status');
 
       G.Input.init(this.canvas);
       G.Textures.init();
       G.Sprites.init();
       G.Projectiles.init();
-      this.msgEl = document.getElementById('msg');
-
-      G.Input.init(this.canvas);
-      G.Textures.init();
-      G.Sprites.init();
-      this.msgEl = document.getElementById('msg');
-      this.hudEl = {
-        hp: document.getElementById('hp'), ar: document.getElementById('ar'),
-        bu: document.getElementById('bu'), sh: document.getElementById('sh'),
-        k1: document.getElementById('k1'), k2: document.getElementById('k2'), k3: document.getElementById('k3')
-      };
       G.Renderer.init(this.canvas);
-      G.Player.newGame();
-      this.loadLevel(0);
+      G.UI.init(() => this.confirmScreen());
+      this.newGame();
 
-      // Пауза при выходе из pointer lock (Esc) и при потере фокуса
+      // Пауза при выходе из pointer lock (Esc) и при потере фокуса — только во время игры
       G.Input.onLockChange = (locked) => { if (!locked && this.state === 'running') this.pause(); };
       window.addEventListener('blur', () => { if (this.state === 'running') this.pause(); });
       document.addEventListener('visibilitychange', () => {
@@ -56,25 +55,84 @@
       requestAnimationFrame((t) => this.frame(t));
     },
 
+    // ---------- Уровни и забег ----------
+    newGame() {
+      this.run = emptyStats();
+      G.Player.newGame();
+      this.loadLevel(0);
+    },
+
     loadLevel(i) {
       this.levelIndex = i;
       this.pendingExit = false;
+      this.bossTimer = 0;
+      this.levelTime = 0;
       G.Map.load(G.LEVELS[i]);
       G.Player.reset(G.Map.startX, G.Map.startY, G.Map.startAngle);
-      G.Player.clearKeys();
+      G.Player.startLevel();
       this.message(G.Map.name);
       G.Player.dirty = true;
     },
 
-    restart() {
-      G.Player.newGame();
-      this.loadLevel(this.levelIndex);
-      this.acc = 0;
+    // Статистика текущего уровня
+    levelStats() {
+      const M = G.Map;
+      return { kills: M.killsFound, killsTotal: M.killsTotal, items: M.itemsFound, itemsTotal: M.itemsTotal,
+               secrets: M.secretsFound, secretsTotal: M.secretsTotal, time: this.levelTime };
     },
 
-    // Переход по выходу. Последний уровень пока зацикливается (экран победы — этап 5).
-    nextLevel() {
-      this.loadLevel((this.levelIndex + 1) % G.LEVELS.length);
+    addToRun(st) {
+      const r = this.run;
+      r.kills += st.kills; r.killsTotal += st.killsTotal;
+      r.items += st.items; r.itemsTotal += st.itemsTotal;
+      r.secrets += st.secrets; r.secretsTotal += st.secretsTotal;
+      r.time += st.time;
+    },
+
+    onBossDefeated() {
+      this.bossTimer = 3;
+      this.message('Страж повержен!');
+    },
+
+    // Показ экрана: логика замирает, курсор освобождается (клик по экрану работает)
+    showScreen(kind) {
+      this.state = 'screen';
+      this.screen = kind;
+      G.Input.down.clear();
+      G.Input.exitLock();
+      this.msgEl.textContent = '';
+      const st = this.levelStats();
+      if (kind === 'death') {
+        G.UI.show('death', st, { name: G.Map.name });
+      } else if (kind === 'intermission') {
+        this.addToRun(st);
+        const next = G.LEVELS[this.levelIndex + 1];
+        G.UI.show('intermission', st, { name: G.Map.name, next: next ? next.name : null });
+      } else {
+        this.addToRun(st);
+        G.UI.show('victory', this.run, { name: '' });
+      }
+    },
+
+    // Подтверждение экрана (Enter / клик): следующий шаг по виду экрана
+    confirmScreen() {
+      if (this.state !== 'screen') return;
+      const kind = this.screen;
+      G.UI.hide();
+      this.screen = null;
+      if (kind === 'death') {
+        G.Player.newGame();
+        this.loadLevel(this.levelIndex);
+      } else if (kind === 'intermission') {
+        if (this.levelIndex + 1 < G.LEVELS.length) this.loadLevel(this.levelIndex + 1);
+        else { this.newGame(); }
+      } else {
+        this.newGame();
+      }
+      this.state = 'running';
+      this.acc = 0;
+      this.last = performance.now();
+      G.Input.requestLock();
     },
 
     // Временное сообщение (позже заменится на HUD в canvas)
@@ -86,7 +144,7 @@
     showOverlay(v) { this.overlay.hidden = !v; },
 
     resume() {
-      if (this.state === 'running') return;
+      if (this.state !== 'paused') return;
       this.state = 'running';
       this.acc = 0;
       this.last = performance.now();
@@ -102,7 +160,7 @@
       this.showOverlay(true);
     },
 
-    // Временные горячие клавиши этапа 0 (в этапе 6 их заменит меню настроек)
+    // Временные горячие клавиши (в этапе 6 их заменит меню настроек)
     handleHotkeys() {
       const In = G.Input;
       if (In.wasPressed('F3')) {
@@ -116,6 +174,19 @@
       }
     },
 
+    // Строка статуса: оставшееся время сфер (обновляется только при смене секунды)
+    updateStatus() {
+      const P = G.Player;
+      const inv = Math.ceil(P.invuln), q = Math.ceil(P.quad);
+      const key = inv * 1000 + q;
+      if (key === this.statusKey) return;
+      this.statusKey = key;
+      let t = '';
+      if (inv > 0) t += 'Неуязвимость ' + inv + ' с  ';
+      if (q > 0) t += 'Ярость ×' + CFG.SPHERE.quadMul + ' ' + q + ' с';
+      this.statusEl.textContent = t;
+    },
+
     frame(now) {
       requestAnimationFrame((t) => this.frame(t));
       const t0 = performance.now();
@@ -127,22 +198,22 @@
       G.Input.poll();
       this.handleHotkeys();
 
-      if (this.state === 'running') {
+      if (this.state === 'screen') {
+        if (G.Input.wasPressed('Enter') || G.Input.wasPressed('Space')) this.confirmScreen();
+      } else if (this.state === 'running') {
         // Мышь применяется на каждом кадре (не привязана к 60 Гц) — плавный поворот
         // на мониторах 120/144 Гц. Коллизий у поворота нет, детерминизм логики не страдает.
         const dx = G.Input.consumeMouse();
-        if (dx !== 0) G.Player.turn(dx * CFG.PLAYER.mouseSens);
+        if (dx !== 0 && !G.Player.dead) G.Player.turn(dx * CFG.PLAYER.mouseSens);
 
         // «Использовать» — раз за кадр (в тике одно нажатие сработало бы на каждом из тиков кадра)
-        if (G.Input.wasPressed('KeyE') || G.Input.wasPressed('Space')) {
+        if (!G.Player.dead && (G.Input.wasPressed('KeyE') || G.Input.wasPressed('Space'))) {
           const msg = G.Map.use(G.Player.x, G.Player.y, G.Player.angle, G.Player);
           if (msg) this.message(msg);
         }
 
         const wheel = G.Input.consumeWheel();
-        if (wheel !== 0) G.Player.cycleWeapon(wheel);
-        // Рестарт после смерти (экран смерти со статистикой — этап 5)
-        if (G.Player.dead && G.Input.wasPressed('Enter')) this.restart();
+        if (wheel !== 0 && !G.Player.dead) G.Player.cycleWeapon(wheel);
 
         this.acc += dt;
         while (this.acc >= CFG.STEP) {
@@ -151,15 +222,24 @@
           G.Items.update(G.Player.x, G.Player.y);
           G.Enemies.update(CFG.STEP);
           G.Projectiles.update(CFG.STEP);
+          if (!G.Player.dead) this.levelTime += CFG.STEP;
           this.acc -= CFG.STEP;
-          if (this.pendingExit) { this.nextLevel(); this.acc = 0; break; }
+          if (this.pendingExit) break;
         }
 
         if (this.msgTimer > 0) {
           this.msgTimer -= dt;
           if (this.msgTimer <= 0) this.msgEl.textContent = '';
         }
+        this.updateStatus();
 
+        // Переходы между состояниями
+        if (this.pendingExit) { this.pendingExit = false; this.showScreen('intermission'); }
+        else if (G.Player.dead && G.Player.deathTime >= 1.5) this.showScreen('death');
+        else if (this.bossTimer > 0) {
+          this.bossTimer -= dt;
+          if (this.bossTimer <= 0) this.showScreen('victory');
+        }
       }
 
       G.Renderer.render(G.Player.x, G.Player.y, G.Player.angle);

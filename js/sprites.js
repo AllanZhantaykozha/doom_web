@@ -74,100 +74,108 @@
     g.beginPath(); g.arc(cx, cy, r * 0.38, 0, 7); g.fill();
   }
 
-  function handBottom(g, y) {            // кисти внизу кадра, держащие оружие
-    poly(g, SKIN_D, [12, y + 4, 24, y - 4, 40, y - 4, 52, y + 4, 54, 64, 10, 64]);
-    poly(g, SKIN, [14, y + 6, 25, y - 2, 39, y - 2, 50, y + 6, 51, 64, 13, 64]);
-    rect(g, SKIN_D, 22, y + 8, 1, 6); rect(g, SKIN_D, 28, y + 8, 1, 6); rect(g, SKIN_D, 34, y + 8, 1, 6);
+  // Оружие нарисовано «из-за плеча»: ствол уходит от игрока к точке схода (центр, верх), поэтому
+  // спереди оно узкое и короткое, сзади — широкое. Руки снизу. Канвас 64x64, низ кадра = низ вида.
+  function barrelPoly(g, outline, fill, hi, xt1, xt2, yt, xb1, xb2, yb) {
+    poly(g, outline, [xt1 - 1, yt - 1, xt2 + 1, yt - 1, xb2 + 2, yb, xb1 - 2, yb]);
+    poly(g, fill, [xt1, yt, xt2, yt, xb2, yb, xb1, yb]);
+    const m1 = (xt1 + xt2) / 2 - 1, m2 = (xt1 + xt2) / 2 + 1, n1 = (xb1 + xb2) / 2 - 2, n2 = (xb1 + xb2) / 2 + 2;
+    poly(g, hi, [m1, yt, m2, yt, n2, yb, n1, yb]);
+  }
+  function hand(g, y, wide) {            // кисть снизу, обхватывает оружие
+    const w = wide || 0;
+    poly(g, '#111', [16 - w, 67, 21 - w, y - 1, 43 + w, y - 1, 48 + w, 67]);
+    poly(g, SKIN_D, [18 - w, 67, 22 - w, y + 1, 42 + w, y + 1, 46 + w, 67]);
+    poly(g, SKIN, [21 - w, 67, 25 - w, y + 3, 39 + w, y + 3, 43 + w, 67]);
+    rect(g, SKIN_D, 26, y + 6, 1, 5); rect(g, SKIN_D, 31, y + 6, 1, 5); rect(g, SKIN_D, 36, y + 6, 1, 5);
   }
 
   function drawPistol(g, dy, flash) {
     g.save(); g.translate(0, dy);
-    poly(g, '#3a2a1e', [25, 44, 39, 44, 42, 66, 22, 66]);
-    poly(g, METAL_D, [26, 16, 38, 16, 39, 46, 25, 46]);
-    rect(g, METAL_L, 29, 16, 6, 28);
-    rect(g, '#111', 31, 12, 2, 4);
-    rect(g, '#111', 28, 15, 8, 2);
-    handBottom(g, 52);
-    poly(g, SKIN, [37, 38, 45, 42, 43, 54, 36, 50]);
+    poly(g, '#111', [22, 55, 42, 55, 46, 67, 18, 67]);                           // рамка
+    poly(g, '#2a2d33', [23, 56, 41, 56, 44, 67, 20, 67]);
+    barrelPoly(g, '#111', '#3b4048', '#6c737d', 28, 36, 30, 25, 39, 56);         // затвор
+    rect(g, '#111', 31, 27, 2, 4);                                              // мушка
+    rect(g, '#111', 26, 52, 4, 4); rect(g, '#111', 34, 52, 4, 4);               // целик
+    hand(g, 58, 0);
+    poly(g, SKIN_D, [41, 58, 46, 54, 49, 67, 43, 67]);                          // большой палец
     g.restore();
-    if (flash) star(g, 32, 10 + dy, 11);
+    if (flash) star(g, 32, 26 + dy, 9);
   }
 
   function drawShotgun(g, dy, flash, pump) {
     g.save(); g.translate(0, dy);
-    rect(g, METAL_D, 25, 6, 6, 40); rect(g, METAL_D, 33, 6, 6, 40);
-    rect(g, METAL_L, 26, 6, 2, 40); rect(g, METAL_L, 34, 6, 2, 40);
-    rect(g, METAL, 24, 20, 16, 3);
-    rect(g, '#2a1a10', 22, 40 + pump, 20, 12);           // цевьё
-    rect(g, '#6b3f1e', 23, 41 + pump, 18, 10);
-    rect(g, METAL, 21, 50, 22, 12);                     // ствольная коробка
-    rect(g, METAL_L, 21, 50, 22, 2);
+    poly(g, '#111', [19, 50, 45, 50, 49, 67, 15, 67]);                           // ствольная коробка
+    poly(g, '#2a2d33', [20, 51, 44, 51, 47, 67, 17, 67]);
+    barrelPoly(g, '#111', '#3b4048', '#6c737d', 30, 34, 14, 26, 38, 51);         // ствол
+    rect(g, '#111', 31, 11, 2, 4);
+    poly(g, '#111', [21, 41 + pump, 43, 41 + pump, 47, 53 + pump, 17, 53 + pump]); // цевьё (двигается при перезарядке)
+    poly(g, '#6b3f1e', [22, 42 + pump, 42, 42 + pump, 45, 52 + pump, 19, 52 + pump]);
+    poly(g, '#8a5428', [24, 43 + pump, 30, 43 + pump, 30, 51 + pump, 22, 51 + pump]);
     g.restore();
-    poly(g, SKIN_D, [14, 48 + pump + dy, 22, 42 + pump + dy, 22, 58, 12, 64]);
-    poly(g, SKIN, [42, 42 + pump + dy, 50, 48 + pump + dy, 52, 64, 42, 58]);
-    rect(g, SKIN, 14, 60, 36, 4);
-    if (flash) star(g, 32, 4 + dy, 13);
+    hand(g, 58, 2);
+    poly(g, SKIN, [16, 50 + pump + dy, 22, 46 + pump + dy, 24, 58, 17, 58]);      // пальцы на цевье
+    poly(g, SKIN, [48, 50 + pump + dy, 42, 46 + pump + dy, 40, 58, 47, 58]);
+    if (flash) star(g, 32, 10 + dy, 11);
   }
 
   function drawChaingun(g, dy, flash, rot) {
     g.save(); g.translate(0, dy);
-    for (let i = 0; i < 3; i++) {
-      const x = 22 + i * 7 + (rot ? (i === 1 ? 0 : 0) : 0);
-      rect(g, '#111', x - 1, 10, 7, 32);
-      rect(g, (i + rot) % 2 === 0 ? METAL_L : METAL, x, 10, 5, 32);
-    }
-    rect(g, '#111', 19, 8, 26, 3);
-    rect(g, METAL_D, 18, 38, 28, 22);
-    rect(g, METAL, 20, 40, 24, 6);
-    rect(g, '#7a1f1f', 24, 50, 16, 6);
+    const cA = rot ? '#7d8590' : '#4a4f58', cB = rot ? '#4a4f58' : '#7d8590';
+    limb(g, 27, 46, 29, 20, 5, cA);
+    limb(g, 37, 46, 35, 20, 5, cB);
+    limb(g, 32, 46, 32, 17, 5, rot ? '#5f6670' : '#6a717b');
+    disc(g, '#111', 29, 19, 2.5); disc(g, '#111', 35, 19, 2.5); disc(g, '#111', 32, 16, 2.5);
+    poly(g, '#111', [20, 40, 44, 40, 50, 67, 14, 67]);                           // казённик
+    poly(g, '#3b4048', [22, 42, 42, 42, 47, 67, 17, 67]);
+    poly(g, '#555d68', [24, 43, 40, 43, 41, 48, 23, 48]);
+    rect(g, '#7a1f1f', 25, 54, 14, 5);                                           // лента
     g.restore();
-    handBottom(g, 54);
-    if (flash) star(g, 32, 6 + dy, 12);
+    hand(g, 60, 3);
+    if (flash) star(g, 32, 15 + dy, 10);
   }
 
   function drawRocket(g, dy, flash, smoke) {
     g.save(); g.translate(0, dy);
-    rect(g, '#111', 19, 14, 26, 38);
-    rect(g, '#5b6b32', 21, 14, 22, 38);
-    rect(g, '#7f9145', 23, 14, 5, 38);
-    rect(g, '#3a4520', 21, 22, 22, 3); rect(g, '#3a4520', 21, 40, 22, 3);
-    g.fillStyle = '#0a0a0a';
-    g.beginPath(); g.ellipse(32, 14, 11, 4, 0, 0, 7); g.fill();
-    rect(g, METAL_D, 36, 50, 8, 14);
+    poly(g, '#111', [20, 26, 44, 26, 52, 62, 12, 62]);                           // труба в перспективе
+    poly(g, '#5b6b32', [21, 27, 43, 27, 50, 61, 14, 61]);
+    poly(g, '#7f9145', [24, 27, 29, 27, 28, 61, 19, 61]);
+    poly(g, '#3a4520', [22, 36, 42, 36, 43, 39, 21, 39]);
+    poly(g, '#3a4520', [19, 48, 45, 48, 46, 51, 18, 51]);
+    g.fillStyle = '#111'; g.beginPath(); g.ellipse(32, 26, 11.5, 4, 0, 0, 7); g.fill();   // дульный срез
+    g.fillStyle = '#05050a'; g.beginPath(); g.ellipse(32, 26, 8.5, 2.8, 0, 0, 7); g.fill();
+    rect(g, '#111', 31, 21, 2, 5);                                               // мушка
+    g.fillStyle = '#222'; g.beginPath(); g.ellipse(32, 61, 18, 4, 0, 0, 7); g.fill();
     g.restore();
-    handBottom(g, 54);
+    hand(g, 59, 3);
     if (flash) {
-      g.fillStyle = '#ff7a1a'; g.beginPath(); g.arc(32, 8 + dy, 12, 0, 7); g.fill();
-      g.fillStyle = '#ffe08a'; g.beginPath(); g.arc(32, 8 + dy, 6, 0, 7); g.fill();
+      disc(g, '#ff7a1a', 32, 20 + dy, 11); disc(g, '#ffe08a', 32, 20 + dy, 6);
     }
-    if (smoke) {
-      g.fillStyle = '#9a9a9a';
-      g.beginPath(); g.arc(26, 4, 6, 0, 7); g.arc(38, 2, 7, 0, 7); g.arc(32, 8, 7, 0, 7); g.fill();
-    }
+    if (smoke) { disc(g, '#9a9a9a', 27, 18, 6); disc(g, '#b0b0b0', 37, 15, 7); disc(g, '#888', 32, 22, 6); }
   }
 
+  // Кулак: вид сзади. 0 — готовность (два кулака), 1 — замах/выпад, 2 — кулак вытянут вперёд (меньше и выше)
+  function fist(g, x, y, w, h) {
+    rect(g, '#111', x - 1, y - 1, w + 2, h + 2);
+    rect(g, SKIN, x, y, w, h);
+    rect(g, SKIN_D, x, y + h - 3, w, 3);
+    for (let i = 0; i < 4; i++) disc(g, SKIN, x + w * (i + 0.5) / 4, y + 1, w / 8 + 1);
+    for (let i = 1; i < 4; i++) rect(g, SKIN_D, x + w * i / 4, y + 2, 1, Math.max(2, h * 0.4));
+  }
   function drawFist(g, mode) {
-    if (mode === 0) {                    // готовность: два кулака внизу
-      for (let k = 0; k < 2; k++) {
-        const x = k === 0 ? 6 : 34, w = 24;
-        rect(g, '#111', x - 2, 38, w + 4, 28);
-        rect(g, SKIN, x, 40, w, 26);
-        rect(g, SKIN_D, x, 40, w, 3);
-        for (let i = 1; i < 4; i++) rect(g, SKIN_D, x + i * 6, 42, 1, 8);
-        rect(g, '#4a5a3a', x, 58, w, 8);
-      }
-    } else {                             // удар: кулак по центру
-      const big = mode === 2;
-      const x = big ? 16 : 22, y = big ? 6 : 16, w = big ? 32 : 20, h = big ? 34 : 26;
-      rect(g, '#4a5a3a', x - 2, y + h - 2, w + 4, 64);
-      rect(g, '#111', x - 2, y - 2, w + 4, h + 4);
-      rect(g, SKIN, x, y, w, h);
-      rect(g, SKIN_D, x, y, w, 3);
-      for (let i = 1; i < 4; i++) rect(g, SKIN_D, x + i * (w / 4), y + 2, 1, 9);
-      rect(g, SKIN_D, x, y + h - 3, w, 3);
+    if (mode === 0) {
+      poly(g, '#111', [8, 67, 12, 54, 26, 54, 30, 67]); poly(g, '#4a5a3a', [9, 67, 13, 55, 25, 55, 29, 67]);
+      fist(g, 11, 44, 16, 12);
+      poly(g, '#111', [34, 67, 38, 52, 54, 52, 58, 67]); poly(g, '#4a5a3a', [35, 67, 39, 53, 53, 53, 57, 67]);
+      fist(g, 37, 41, 18, 13);
+    } else if (mode === 1) {
+      poly(g, '#111', [24, 67, 29, 44, 41, 44, 46, 67]); poly(g, '#4a5a3a', [25, 67, 30, 45, 40, 45, 45, 67]);
+      fist(g, 28, 33, 14, 12);
+    } else {
+      poly(g, '#111', [25, 67, 30, 36, 40, 36, 45, 67]); poly(g, '#4a5a3a', [26, 67, 31, 37, 39, 37, 44, 67]);
+      fist(g, 29, 26, 12, 10);
     }
   }
-
 
   // ---- Враги: 4 типа, одно направление взгляда (в камеру) ----
   function limb(g, x1, y1, x2, y2, w, col) {
@@ -251,6 +259,10 @@
       rect(g, '#fff', hx - 2, hy + 3, 1, 1); rect(g, '#fff', hx + 1, hy + 3, 1, 1);
     } else if (!o.visor) {
       rect(g, '#411', hx - 2, hy + 4, 4, o.pain || o.atk ? 2 : 1);
+    }
+    if (o.horns) {                                          // рога
+      poly(g, '#111', [hx - 8, hy - 3, hx - 13, hy - 14, hx - 4, hy - 6]); poly(g, '#d8d0b8', [hx - 7, hy - 4, hx - 12, hy - 13, hx - 5, hy - 6]);
+      poly(g, '#111', [hx + 8, hy - 3, hx + 13, hy - 14, hx + 4, hy - 6]); poly(g, '#d8d0b8', [hx + 7, hy - 4, hx + 12, hy - 13, hx + 5, hy - 6]);
     }
     if (o.pads) {                                           // наплечники
       rect(g, '#111', cx - 9 * b - 6, 19, 11, 8); rect(g, o.pads, cx - 9 * b - 5, 20, 9, 6);
@@ -479,6 +491,22 @@
         kind: 'cannon', skin: '#7a828f', skinD: '#3a4050', cloth: '#5a6678', clothL: '#7a889c', clothD: '#2d3440',
         leg: '#3d4757', boot: '#1c2028', helm: '#4a5568', visor: '#ff3a2a', plate: '#b08a2a', pads: '#6a7a90',
         bulk: 1.45, headY: 12, headR: 6 });
+
+      // Босс: обычный и «разъярённый» наборы (на третьей фазе меняется спрайт)
+      const wardenStyle = {
+        kind: 'cannon', skin: '#7a6a8a', skinD: '#4a3a5a', cloth: '#4a3a58', clothL: '#6a5478', clothD: '#2a1f35',
+        leg: '#3a2d48', boot: '#150f1c', helm: '#3a3048', visor: '#9aff40', plate: '#8a2a2a', pads: '#6a5a8a',
+        bulk: 1.8, headY: 11, headR: 6, horns: true };
+      EN.warden = buildEnemySet(drawHumanoid, drawCorpseHumanoid, wardenStyle);
+      EN.warden2 = buildEnemySet(drawHumanoid, drawCorpseHumanoid, Object.assign({}, wardenStyle, {
+        cloth: '#7a2a38', clothL: '#a03a48', clothD: '#3a1018', visor: '#ffe030', plate: '#ffb030', pads: '#aa3030', skin: '#8a5a6a' }));
+
+      // Сферы бонусов
+      const sphere = (c1, c2, c3) => make((g) => {
+        disc(g, '#111', 32, 34, 20); disc(g, c1, 32, 34, 18); disc(g, c2, 32, 34, 13); disc(g, c3, 28, 29, 6); disc(g, '#fff', 25, 26, 2);
+      });
+      it.sphereI = sphere('#1a6aa0', '#4ac8f0', '#d8f8ff');
+      it.sphereD = sphere('#a01a10', '#f05a2a', '#ffd0a0');
 
       // Снаряд кислотника
       this.fx.bolt = make((g) => {

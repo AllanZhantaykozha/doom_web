@@ -4,7 +4,7 @@
   'use strict';
   const CFG = G.CONFIG;
   const ROCKET = 0, EXPL = 1, PUFF = 2, BLOOD = 3, BOLT = 4;
-  const POOL = 64;
+  const POOL = 96;
   const FRAME_TIME = [0, 0.07, 0.07, 0.08];            // длительность кадра эффекта, с
   const EXPL_SIZES = [0.8, 1.1, 1.4, 1.6, 1.7, 1.6];
 
@@ -28,10 +28,10 @@
       return null;                                     // пул переполнен — эффект пропускается
     },
 
-    spawnRocket(x, y, angle) {
+    spawnRocket(x, y, angle, dmg) {
       const p = this.alloc();
       if (!p) return;
-      p.active = true; p.kind = ROCKET; p.t = 0;
+      p.active = true; p.kind = ROCKET; p.t = 0; p.dmg = dmg;
       p.x = x; p.y = y;
       p.vx = Math.cos(angle) * CFG.ROCKET.speed;
       p.vy = Math.sin(angle) * CFG.ROCKET.speed;
@@ -119,7 +119,7 @@
 
     // Взрыв ракеты: урон по площади с линейным спадом, проверка видимости, отбрасывание.
     explode(p) {
-      const R = CFG.ROCKET.radius, D = CFG.ROCKET.damage;
+      const R = CFG.ROCKET.radius, D = p.dmg;          // урон по врагам (с учётом сферы ярости)
       const ex = p.x, ey = p.y;
       p.kind = EXPL; p.t = 0; p.vx = p.vy = 0; p.z = 0.25;
       p.tex = G.Sprites.fx.expl[0]; p.size = EXPL_SIZES[0];
@@ -144,7 +144,7 @@
       const d = Math.max(0, dist - CFG.PLAYER.radius);
       if (d < R && (dist < 0.01 || G.Map.castRay(ex, ey, dx / dist, dy / dist, dist) >= dist - 0.05)) {
         const k = 1 - d / R;
-        P.damage(D * k * CFG.ROCKET.selfScale, ex, ey);
+        P.damage(CFG.ROCKET.damage * k * CFG.ROCKET.selfScale, ex, ey);    // самоурон без усиления
         if (dist > 0.01) P.push(dx / dist * CFG.ROCKET.pushPlayer * k, dy / dist * CFG.ROCKET.pushPlayer * k);
       }
     }

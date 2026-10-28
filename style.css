@@ -56,3 +56,28 @@ html, body {
   text-shadow: 1px 1px 2px #000;
   pointer-events: none;
 }
+
+#status {
+  position: fixed;
+  right: 12px; top: 10px;
+  text-align: right;
+  font-size: 15px;
+  color: #8ff;
+  text-shadow: 1px 1px 2px #000;
+  pointer-events: none;
+}
+#endscreen {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.78);
+  cursor: pointer; user-select: none; text-align: center;
+}
+#endscreen[hidden] { display: none; }
+#endscreen h1 { font-size: 44px; letter-spacing: 6px; margin: 0 0 6px; color: #d8d8d8; }
+#endscreen.death h1 { color: #c33; }
+#endscreen.victory h1 { color: #e8c010; }
+#endscreen h2 { font-size: 18px; font-weight: normal; margin: 0 0 22px; color: #aaa; }
+#endscreen table { border-collapse: collapse; font-size: 20px; margin-bottom: 26px; }
+#endscreen td { padding: 4px 18px; text-align: right; }
+#endscreen td:first-child { text-align: left; color: #aaa; }
+#endscreen .hint { font-size: 15px; color: #999; margin: 0; }
