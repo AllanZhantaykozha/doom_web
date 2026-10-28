@@ -61,6 +61,7 @@
 
       this.w = w; this.h = h; this.cells = cells; this.doorAt = doorAt;
       this.seen = new Uint8Array(w * h);
+      G.Textures.setTheme(level.theme);          // цветовая гамма пола и потолка уровня
       this.name = level.name;
       this.startAngle = (level.startAngleDeg || 0) * Math.PI / 180;
       G.Enemies.reset();        // после установки размеров: буферы потока зависят от w*h

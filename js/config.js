@@ -23,7 +23,9 @@
       walkSpeed: 3.0,        // клеток/с
       runSpeed: 5.0,
       turnSpeed: 2.4,        // рад/с (стрелки)
-      mouseSens: 0.0025      // рад/пиксель
+      mouseSens: 0.0025,     // рад/пиксель
+      maxPitch: 0.42,        // предел наклона камеры, рад (≈24°)
+      invertY: false         // инвертировать вертикаль
     },
 
     DOOR: {
@@ -105,7 +107,7 @@
   // ---------- Настройки пользователя (localStorage) ----------
   const KEY = 'ironhollow.settings';
   G.Settings = {
-    data: { mouse: 10, sfx: 80, music: 50, musicOn: true, fov: 66, res: 0, fps: false },
+    data: { mouse: 10, sfx: 80, music: 50, musicOn: true, fov: 66, res: 0, fps: false, invertY: false },
 
     load() {
       try {
@@ -125,6 +127,7 @@
     apply() {
       const d = this.data, R = G.Renderer, A = G.Audio;
       G.CONFIG.PLAYER.mouseSens = d.mouse * 0.00025;
+      G.CONFIG.PLAYER.invertY = d.invertY;
       R.setFov(d.fov);
       const r = G.CONFIG.RESOLUTIONS[d.res] || G.CONFIG.RESOLUTIONS[0];
       if (R.w !== r[0] || R.h !== r[1]) R.setResolution(r[0], r[1]);

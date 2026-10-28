@@ -33,6 +33,7 @@
     painTimer: 0, grinTimer: 0, lookTimer: 0, faceLook: 0,
     glance: 0, glanceTimer: 1,
     stepTimer: 0, painCool: 0,
+    pitch: 0,                             // наклон камеры, рад (+ вверх), сдвиг горизонта; прицеливание остаётся горизонтальным
 
     reset(x, y, angle) {
       this.x = x;
@@ -53,6 +54,7 @@
       this.dead = false; this.deathTime = 0;
       this.invuln = 0; this.quad = 0;
       this.stepTimer = 0;
+      this.pitch = 0;
       this.kx = this.ky = 0;
       this.hurtFlash = this.pickupFlash = 0;
       this.painTimer = this.grinTimer = this.lookTimer = 0;
@@ -239,6 +241,17 @@
       }
     },
 
+    // Наклон камеры вверх/вниз. dy — движение мыши/пальца вниз в «пикселях мыши» (вниз = взгляд вниз).
+    look(dy) {
+      const C = G.CONFIG.PLAYER;
+      this.pitch += (C.invertY ? dy : -dy) * C.mouseSens;
+      this.clampPitch();
+    },
+    clampPitch() {
+      const m = G.CONFIG.PLAYER.maxPitch;
+      if (this.pitch > m) this.pitch = m; else if (this.pitch < -m) this.pitch = -m;
+    },
+
     // Поворот вызывается
 
     // Поворот вызывается каждый кадр рендера (мышь) и каждый тик (стрелки/геймпад).
@@ -285,6 +298,14 @@
       if (In.isDown('ArrowRight')) turn += 1;
       turn += In.padTurn;
       if (turn !== 0) this.turn(turn * P.turnSpeed * dt);
+
+      // Наклон камеры: стрелки вверх/вниз, правый стик; Home — вернуть горизонт
+      let tilt = 0;
+      if (In.isDown('ArrowUp')) tilt += 1;
+      if (In.isDown('ArrowDown')) tilt -= 1;
+      tilt += In.padLook * (P.invertY ? 1 : -1);
+      if (tilt !== 0) { this.pitch += tilt * P.turnSpeed * 0.7 * dt; this.clampPitch(); }
+      if (In.wasPressed('Home')) this.pitch = 0;
 
       // Намерение движения в локальных осях: forward (вперёд), strafe (вправо)
       let fwd = 0, str = 0;

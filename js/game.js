@@ -4,7 +4,7 @@
   'use strict';
   const CFG = G.CONFIG;
   const SAVE_KEY = 'ironhollow.save';
-  const SAVE_VERSION = 1;
+  const SAVE_VERSION = 2;           // 2: в игру добавлен четвёртый уровень (старые сохранения не совместимы)
 
   const emptyStats = () => ({ kills: 0, killsTotal: 0, items: 0, itemsTotal: 0, secrets: 0, secretsTotal: 0, time: 0 });
 
@@ -112,7 +112,11 @@
       this.message('Страж повержен!');
     },
 
-    syncMusic() { G.Audio.music(this.state === 'running', this.levelIndex); },
+    // Песня берётся из описания уровня (level.song), иначе по номеру уровня
+    syncMusic() {
+      const lv = G.LEVELS[this.levelIndex];
+      G.Audio.music(this.state === 'running', lv && lv.song !== undefined ? lv.song : this.levelIndex);
+    },
 
     // ---------- Состояния ----------
     // Показ экрана: логика замирает, курсор освобождается (клик по экрану работает)
@@ -354,6 +358,8 @@
         // на мониторах 120/144 Гц. Коллизий у поворота нет, детерминизм логики не страдает.
         const dx = G.Input.consumeMouse();
         if (dx !== 0 && !G.Player.dead) G.Player.turn(dx * CFG.PLAYER.mouseSens);
+        const dy = G.Input.consumePitch();
+        if (dy !== 0 && !G.Player.dead) G.Player.look(dy);
 
         if (G.Input.wasPressed('Tab')) this.mapOpen = !this.mapOpen;
 

@@ -3,20 +3,21 @@
   'use strict';
 
   // Коды клавиш, для которых отменяем действие браузера по умолчанию.
-  const PREVENT = new Set(['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  const PREVENT = new Set(['Home', 'Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
     'F3', 'F4', 'F5', 'F9', 'ControlLeft', 'ControlRight']);
 
   const Input = G.Input = {
     down: new Set(),        // удерживаемые коды (KeyboardEvent.code)
     pressed: new Set(),     // нажатые с прошлого сброса (одиночные нажатия)
     mouseDX: 0,
+    mouseDY: 0,
     mouseDown: false,
     wheel: 0,
     locked: false,
     // Состояние геймпада (обновляется poll() раз за кадр рендера)
-    padMoveX: 0, padMoveY: 0, padTurn: 0, padRun: false, padFire: false,
+    padMoveX: 0, padMoveY: 0, padTurn: 0, padLook: 0, padRun: false, padFire: false,
     // Сенсорное управление: джойстик (-1..1), накопленный поворот свайпом (px), огонь, бег
-    touch: false, touchX: 0, touchY: 0, touchDX: 0, touchRun: false, touchFire: false,
+    touch: false, touchX: 0, touchY: 0, touchDX: 0, touchDY: 0, touchRun: false, touchFire: false,
 
     init(canvas) {
       window.addEventListener('keydown', (e) => {
@@ -28,7 +29,7 @@
       window.addEventListener('blur', () => { this.down.clear(); this.mouseDown = false; });
 
       document.addEventListener('mousemove', (e) => {
-        if (this.locked) this.mouseDX += e.movementX;
+        if (this.locked) { this.mouseDX += e.movementX; this.mouseDY += e.movementY; }
       });
       document.addEventListener('mousedown', (e) => { if (this.locked && e.button === 0) this.mouseDown = true; });
       document.addEventListener('mouseup', (e) => { if (e.button === 0) this.mouseDown = false; });
@@ -37,7 +38,7 @@
       }, { passive: true });
       document.addEventListener('pointerlockchange', () => {
         this.locked = document.pointerLockElement === canvas;
-        if (!this.locked) { this.mouseDX = 0; this.mouseDown = false; }
+        if (!this.locked) { this.mouseDX = 0; this.mouseDY = 0; this.mouseDown = false; }
         if (this.onLockChange) this.onLockChange(this.locked);
       });
       this.canvas = canvas;
@@ -67,6 +68,14 @@
       const w = this.wheel;
       this.wheel = 0;
       return w;
+    },
+
+    // Вертикальный наклон за кадр (в «пикселях мыши»): мышь + вертикальный свайп
+    consumePitch() {
+      const d = this.mouseDY + this.touchDY * G.CONFIG.TOUCH_LOOK;
+      this.mouseDY = 0;
+      this.touchDY = 0;
+      return d;
     },
 
     // Горизонтальный поворот за кадр в «пикселях мыши»: мышь + свайп пальцем
@@ -100,7 +109,7 @@
       const R = 58;                                   // радиус хода джойстика, px
       const base = document.getElementById('t-base'), knob = document.getElementById('t-knob');
       const mz = document.getElementById('tz-move'), lz = document.getElementById('tz-look');
-      let mid = null, ox = 0, oy = 0, lid = null, lx = 0;
+      let mid = null, ox = 0, oy = 0, lid = null, lx = 0, ly = 0;
 
       const place = (el, x, y) => { el.style.left = x + 'px'; el.style.top = y + 'px'; };
       mz.addEventListener('pointerdown', (e) => {
@@ -132,12 +141,13 @@
 
       lz.addEventListener('pointerdown', (e) => {
         if (lid !== null) return;
-        lid = e.pointerId; capture(lz, lid); lx = e.clientX;
+        lid = e.pointerId; capture(lz, lid); lx = e.clientX; ly = e.clientY;
       });
       lz.addEventListener('pointermove', (e) => {
         if (e.pointerId !== lid) return;
         this.touchDX += e.clientX - lx;
-        lx = e.clientX;
+        this.touchDY += e.clientY - ly;
+        lx = e.clientX; ly = e.clientY;
       });
       const endLook = (e) => { if (e.pointerId === lid) lid = null; };
       lz.addEventListener('pointerup', endLook);
@@ -171,7 +181,7 @@
       // Сброс при скрытии панели (меню, пауза): иначе палец «залипнет»
       this.touchReset = () => {
         mid = null; lid = null;
-        this.touchX = this.touchY = this.touchDX = 0;
+        this.touchX = this.touchY = this.touchDX = this.touchDY = 0;
         this.touchRun = this.touchFire = false;
         base.hidden = knob.hidden = true;
         root.querySelectorAll('.btn.on').forEach((b) => b.classList.remove('on'));
@@ -194,7 +204,7 @@
 
     // Опрос геймпада. getGamepads() создаёт небольшой массив — вызываем раз за кадр, не за тик.
     poll() {
-      this.padMoveX = this.padMoveY = this.padTurn = 0;
+      this.padMoveX = this.padMoveY = this.padTurn = this.padLook = 0;
       this.padRun = false;
       this.padFire = false;
       if (!navigator.getGamepads) return;
@@ -207,6 +217,7 @@
         this.padMoveX = dead(p.axes[0]);
         this.padMoveY = -dead(p.axes[1]);   // вверх на стике = вперёд
         this.padTurn = dead(p.axes[2]);
+        this.padLook = dead(p.axes[3]);                  // правый стик по вертикали
         this.padRun = !!(p.buttons[10] && p.buttons[10].pressed); // нажатие левого стика
         this.padFire = !!(p.buttons[7] && p.buttons[7].pressed);  // правый курок
         break;

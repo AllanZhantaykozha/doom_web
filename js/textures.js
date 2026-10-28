@@ -6,7 +6,7 @@
 
   const SIZE = 64;
   const LIGHT_LEVELS = 32;
-  const WALL_TYPES = 6;
+  const WALL_TYPES = 9;
   const LITTLE_ENDIAN = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
 
   // Упаковка в 32 бита под порядок байт платформы (ImageData хранит RGBA побайтно).
@@ -166,6 +166,80 @@
     setRGB(o, 82 * k, 84 * k, 104 * k);
   }
 
+  // ---- Синяя гамма (уровень «Синий сектор»): ледяные блоки, техно-панели, синий мрамор ----
+
+  // 7. Ледяные блоки 32x16 со сдвигом рядов, инеем и трещинами.
+  function genIce(x, y, o) {
+    const row = y >> 4;
+    const bx = (x + ((row & 1) ? 16 : 0)) & 63;
+    const lx = bx & 31, ly = y & 15;
+    const n = hash(x, y, 101) * 0.25 + vnoise(x, y, 8, 8, 102) * 0.5;
+    let k = 0.72 + n * 0.6;
+    const blk = hash(bx >> 5, row, 103);
+    k *= 0.9 + blk * 0.2;
+    if (ly < 1 || lx < 1) { setRGB(o, 60, 100, 150); return; }       // шов
+    if (ly < 3 || lx < 3) k *= 1.15;
+    else if (ly > 13 || lx > 29) k *= 0.8;
+    let r = 150 * k, g = 205 * k, b = 245 * k;
+    if (Math.abs(vnoise(x, y, 14, 14, 104) - 0.5) < 0.025) { r *= 0.55; g *= 0.65; b *= 0.8; }   // трещина
+    if (hash(x, y, 105) > 0.95) { r = g = b = 240; }                                           // иней
+    setRGB(o, r, g, b);
+  }
+
+  // 8. Синие техно-панели 32x32 с цианом светящимися линиями и «схемой».
+  function genTech(x, y, o) {
+    const lx = x & 31, ly = y & 31;
+    let k = 0.7 + hash(x, y, 111) * 0.12 + vnoise(x, y, 8, 8, 112) * 0.2;
+    let r = 22 * k, g = 44 * k, b = 90 * k;
+    if (lx === 0 || ly === 0) { setRGB(o, 8, 16, 40); return; }
+    if (lx === 1 || ly === 1) { r *= 1.5; g *= 1.5; b *= 1.4; }
+    else if (lx === 31 || ly === 31) { r *= 0.6; g *= 0.6; b *= 0.7; }
+    if ((lx === 8 || lx === 23) && ly > 3 && ly < 29) { r = 40; g = 120; b = 170; }           // дорожки схемы
+    if (ly >= 15 && ly <= 17 && lx > 5 && lx < 26) {                                         // светящаяся полоса
+      const e = ly === 16 ? 1 : 0.55;
+      r = 70 * e + 20; g = 225 * e + 20; b = 255 * e;
+    }
+    if (((lx === 8 || lx === 23) && (ly === 4 || ly === 28))) { r = 120; g = 240; b = 255; } // узлы
+    setRGB(o, r, g, b);
+  }
+
+  // 9. Синий мрамор плитками 32x32 с жилами.
+  function genMarble(x, y, o) {
+    const lx = x & 31, ly = y & 31;
+    const warp = vnoise(x, y, 16, 16, 121) * 40;
+    const vein = Math.abs(Math.sin((x + warp) * 0.22 + y * 0.12));
+    let k = 0.65 + vnoise(x, y, 12, 12, 122) * 0.5 + hash(x, y, 123) * 0.06;
+    let r = 35 * k, g = 70 * k, b = 140 * k;
+    if (vein < 0.1) { r = 175; g = 205; b = 255; }
+    else if (vein < 0.18) { r *= 1.5; g *= 1.4; b *= 1.25; }
+    if (lx === 0 || ly === 0) { setRGB(o, 8, 14, 38); return; }
+    if (lx < 3 || ly < 3) { r *= 1.2; g *= 1.2; b *= 1.15; }
+    else if (lx > 29 || ly > 29) { r *= 0.75; g *= 0.75; b *= 0.8; }
+    setRGB(o, r, g, b);
+  }
+
+  function genFloorBlue(x, y, o) {
+    const lx = x & 31, ly = y & 31;
+    const n = hash(x, y, 131) * 0.25 + vnoise(x, y, 10, 10, 132) * 0.5;
+    let k = 0.6 + n * 0.6;
+    if (lx === 0 || ly === 0) k = 0.3;
+    else if (lx === 1 || ly === 1) k *= 1.15;
+    k *= 0.9 + hash(x >> 5, y >> 5, 133) * 0.2;
+    setRGB(o, 62 * k, 88 * k, 140 * k);
+  }
+
+  function genCeilBlue(x, y, o) {
+    const lx = x & 31, ly = y & 31;
+    const n = hash(x, y, 141) * 0.12 + vnoise(x, y, 12, 12, 142) * 0.15;
+    let k = 0.5 + n;
+    if (lx === 0 || ly === 0) k = 0.22;
+    else if (lx === 1 || ly === 1) k *= 1.15;
+    let r = 26 * k, g = 38 * k, b = 78 * k;
+    if (lx > 11 && lx < 21 && ly > 5 && ly < 27) { r = 70; g = 190; b = 235; }     // светильник
+    if (lx > 12 && lx < 20 && ly > 7 && ly < 25) { r = 190; g = 240; b = 255; }
+    setRGB(o, r, g, b);
+  }
+
   // Двери 64x64: металл, предупредительные полосы сверху/снизу, цветная пластина по центру.
   function makeDoorGen(ar, ag, ab) {
     return function (x, y, o) {
@@ -220,12 +294,12 @@
   G.Textures = {
     SIZE, LIGHT_LEVELS, WALL_TYPES, pack,
     doors: null,   // doors[0 обычная, 1 красная, 2 синяя, 3 жёлтая][lightLevel] (по столбцам)
-    walls: null,   // walls[type 1..6][lightLevel] -> Uint32Array (по столбцам)
+    walls: null,   // walls[type 1..9][lightLevel] -> Uint32Array (по столбцам)
     floor: null,   // floor[lightLevel] -> Uint32Array (по строкам)
     ceil: null,
 
     init() {
-      const gens = [null, genBrick, genStone, genMoss, genMetal, genWood, genRune];
+      const gens = [null, genBrick, genStone, genMoss, genMetal, genWood, genRune, genIce, genTech, genMarble];
       this.walls = new Array(WALL_TYPES + 1);
       for (let t = 1; t <= WALL_TYPES; t++) this.walls[t] = bake(gens[t], true);
       this.doors = [
@@ -234,11 +308,21 @@
         bake(makeDoorGen(50, 90, 235), true),
         bake(makeDoorGen(235, 200, 50), true)
       ];
-      this.floor = bake(genFloor, false);
-      this.ceil = bake(genCeil, false);
+      // Темы пола и потолка по уровням (level.theme)
+      this.themes = {
+        default: { floor: bake(genFloor, false), ceil: bake(genCeil, false) },
+        blue: { floor: bake(genFloorBlue, false), ceil: bake(genCeilBlue, false) }
+      };
+      this.setTheme('default');
     },
 
-    // Типы стен вне 1..6 (карта допускает до 9) отображаются на существующие циклически.
+    setTheme(name) {
+      const t = this.themes[name] || this.themes.default;
+      this.floor = t.floor;
+      this.ceil = t.ceil;
+    },
+
+    // Типы вне 1..9 отображаются на существующие циклически.
     wallSet(type) {
       return this.walls[((type - 1) % WALL_TYPES) + 1];
     }

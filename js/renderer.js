@@ -10,8 +10,9 @@
     image: null, buf: null,
     zbuf: null,          // перпендикулярное расстояние до стены по столбцам (для спрайтов)
     camX: null,          // координата столбца в [-1, 1], предрасчёт
-    rowDist: null,       // расстояние до пола на строке y (только y >= h/2)
-    rowF: null,          // базовая яркость пола/потолка на строке y
+    kDist: null,         // расстояние до пола/потолка на k-й строке от горизонта
+    kF: null,            // базовая яркость на k-й строке от горизонта
+    hz: 0,               // экранная Y горизонта (с учётом наклона камеры)
     vh: 0,               // высота 3D-вида (без нижней панели)
     scale: 1,            // h / 200 — масштаб относительно базового разрешения
     tanHalfFov: 0,
@@ -50,16 +51,17 @@
       this.camX = new Float32Array(w);
       for (let x = 0; x < w; x++) this.camX[x] = 2 * (x + 0.5) / w - 1;
 
-      // Расстояние до пола на строке y. Камера на высоте 0.5, стена высотой 1 занимает
-      // vh/dist пикселей, поэтому точка пола на смещении p от горизонта лежит на
-      // перпендикулярном расстоянии dist = 0.5*vh / p.
-      const vh = this.vh, half = vh / 2;
-      this.rowDist = new Float32Array(vh);
-      this.rowF = new Float32Array(vh);
-      for (let y = Math.ceil(half); y < vh; y++) {
-        const d = (0.5 * vh) / (y + 0.5 - half);
-        this.rowDist[y] = d;
-        this.rowF[y] = Math.max(C.minLight, 1 - d / C.maxDist);
+      // Расстояние до пола на k-й строке от горизонта. Камера на высоте 0.5, стена высотой 1 занимает
+      // vh/dist пикселей, поэтому точка пола на смещении p=(k+0.5) от горизонта лежит на
+      // перпендикулярном расстоянии dist = 0.5*vh / p. Таблица по k не зависит от наклона камеры:
+      // горизонт — целое число hz, строка пола y даёт k = y - hz, строка потолка y — k = hz - 1 - y.
+      const vh = this.vh;
+      this.kDist = new Float32Array(2 * vh);
+      this.kF = new Float32Array(2 * vh);
+      for (let k = 0; k < 2 * vh; k++) {
+        const d = (0.5 * vh) / (k + 0.5);
+        this.kDist[k] = d;
+        this.kF[k] = Math.max(C.minLight, 1 - d / C.maxDist);
       }
       G.Hud.resize(w, barH, this.scale);
     },
@@ -77,26 +79,39 @@
       const dirX = Math.cos(angle), dirY = Math.sin(angle);
       const planeX = -dirY * this.tanHalfFov, planeY = dirX * this.tanHalfFov;
 
-      // 1. Пол и потолок. Для строки пола y мировая точка столбца x:
-      //    P = pos + rowDist * (dir + plane*camX[x]) — линейна по x, идём с постоянным шагом.
-      //    Потолок — зеркало: строка h-1-y использует те же текселы.
-      const half = h >> 1;
+      // Наклон камеры (взгляд вверх/вниз) — сдвиг горизонта: hz = центр + vh*tan(pitch).
+      // Это «shear», стандартный приём raycasting: при больших углах перспектива слегка искажается.
+      let hz = (h >> 1) + Math.round(Math.tan(G.Player.pitch) * h);
+      if (hz < (h >> 3)) hz = h >> 3; else if (hz > h - (h >> 3)) hz = h - (h >> 3);
+      this.hz = hz;
+
+      // 1. Пол и потолок. Для строки пола мировая точка столбца x:
+      //    P = pos + dist * (dir + plane*camX[x]) — линейна по x, идём с постоянным шагом.
+      //    Строки пола (hz + k) и потолка (hz - 1 - k) делят одни и те же текселы и расстояние.
       const floorSets = T.floor, ceilSets = T.ceil;
-      for (let y = half; y < h; y++) {
-        const rd = this.rowDist[y];
-        let ff = this.rowF[y];
+      const kMax = Math.max(h - hz, hz);
+      for (let k = 0; k < kMax; k++) {
+        const rd = this.kDist[k];
+        let ff = this.kF[k];
         if (boost > 0 && rd < 12) { ff += boost * 0.6 * (1 - rd / 12); if (ff > 1) ff = 1; }
         const lvl = (ff * L) | 0;
         const ft = floorSets[lvl], ct = ceilSets[lvl];
         let fx = (px + rd * (dirX + planeX * camX[0])) * 64;
         let fy = (py + rd * (dirY + planeY * camX[0])) * 64;
         const sx = rd * planeX * (2 / w) * 64, sy = rd * planeY * (2 / w) * 64;
-        let iF = y * w, iC = (h - 1 - y) * w;
-        for (let x = 0; x < w; x++) {
-          const ti = ((fy & 63) << 6) | (fx & 63);
-          buf[iF++] = ft[ti];
-          buf[iC++] = ct[ti];
-          fx += sx; fy += sy;
+        const yF = hz + k, yC = hz - 1 - k;
+        let iF = yF * w, iC = yC * w;
+        if (yF < h && yC >= 0) {
+          for (let x = 0; x < w; x++) {
+            const ti = ((fy & 63) << 6) | (fx & 63);
+            buf[iF++] = ft[ti];
+            buf[iC++] = ct[ti];
+            fx += sx; fy += sy;
+          }
+        } else if (yF < h) {
+          for (let x = 0; x < w; x++) { buf[iF++] = ft[((fy & 63) << 6) | (fx & 63)]; fx += sx; fy += sy; }
+        } else {
+          for (let x = 0; x < w; x++) { buf[iC++] = ct[((fy & 63) << 6) | (fx & 63)]; fx += sx; fy += sy; }
         }
       }
 
@@ -194,7 +209,7 @@
         const tex = texSet[(f * L) | 0];
 
         const lineH = Math.floor(h / dist);
-        const yTop = (h - lineH) * 0.5;               // экранная Y верха стены (может быть < 0)
+        const yTop = hz - lineH * 0.5;                // экранная Y верха стены (может быть < 0)
         let y0 = Math.floor(yTop), y1 = y0 + lineH;
         if (y0 < 0) y0 = 0;
         if (y1 > h) y1 = h;
@@ -208,7 +223,7 @@
         }
       }
 
-      this.drawSprites(px, py, dirX, dirY, planeX, planeY);
+      this.drawSprites(px, py, dirX, dirY, planeX, planeY, hz);
       const ctx = this.ctx;
       ctx.putImageData(this.image, 0, 0, 0, 0, w, h);   // только область 3D-вида
       if (G.Game.mapOpen) this.drawMap(); else this.drawWeapon();
@@ -290,6 +305,13 @@
         ctx.globalAlpha = 0.1;
         ctx.fillStyle = '#ff6a10'; ctx.fillRect(0, 0, w, vh);
       }
+      if (P.pitch !== 0 && !G.Game.mapOpen && !P.dead) {            // прицел: пули летят по линии горизонта
+        const sc = this.scale, cx = Math.round(w / 2), cy = this.hz, a = Math.max(2, Math.round(2 * sc)), g = Math.max(1, Math.round(sc));
+        ctx.globalAlpha = 0.8; ctx.fillStyle = '#fff';
+        ctx.fillRect(cx - a - g, cy, a, g); ctx.fillRect(cx + g + 1, cy, a, g);
+        ctx.fillRect(cx, cy - a - g, g, a); ctx.fillRect(cx, cy + g + 1, g, a);
+        ctx.globalAlpha = 1;
+      }
       const B = G.Enemies.boss;
       if (B && B.alive && B.state !== G.Enemies.IDLE) {          // полоска здоровья босса
         const sc = this.scale, bw = Math.round(w * 0.5), bx = Math.round((w - bw) / 2), by = Math.round(5 * sc), bh = Math.max(3, Math.round(4 * sc));
@@ -308,7 +330,7 @@
     // Спрайты: проекция в пространство камеры, сортировка от дальних к ближним,
     // построчная отрисовка столбцами с обрезкой по z-буферу стен.
     // Источник — любой объект с полями x, y, tex (Uint32Array 64x64 по столбцам), size, z, active.
-    drawSprites(px, py, dirX, dirY, planeX, planeY) {
+    drawSprites(px, py, dirX, dirY, planeX, planeY, hz) {
       const w = this.w, h = this.vh, buf = this.buf, zbuf = this.zbuf;
       const ref = this.sRef, depth = this.sDepth, tx = this.sTx;
       const tanHalf = this.tanHalfFov;
@@ -346,7 +368,7 @@
         const cx = (w * 0.5) * (1 + tx[i] / ty);          // экранная X центра
         const sh = it.size * h / ty;                      // высота на экране
         const sw = it.size * w / (2 * tanHalf * ty);      // ширина (масштаб по X согласован с FOV)
-        const bottom = h * 0.5 + (0.5 - it.z) * h / ty;   // основание на полу (камера на высоте 0.5)
+        const bottom = hz + (0.5 - it.z) * h / ty;        // основание на полу (камера на высоте 0.5)
         const top = bottom - sh;
         const left = cx - sw * 0.5;
 
