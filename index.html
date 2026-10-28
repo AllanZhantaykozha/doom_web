@@ -2,7 +2,9 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>IRONHOLLOW</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -14,6 +16,20 @@
 <div id="status"></div>
 <div id="endscreen" hidden></div>
 <div id="overlay"></div>
+
+<!-- Сенсорное управление (показывается на телефонах во время игры) -->
+<div id="touch">
+  <div class="zone" id="tz-move"></div>
+  <div class="zone" id="tz-look"></div>
+  <div id="t-base" hidden></div><div id="t-knob" hidden></div>
+  <button class="btn" id="t-fire">ОГОНЬ</button>
+  <button class="btn" id="t-use">E</button>
+  <button class="btn small" id="t-prev">◀</button>
+  <button class="btn small" id="t-next">▶</button>
+  <button class="btn small" id="t-map">КАРТА</button>
+  <button class="btn small" id="t-pause">❚❚</button>
+</div>
+<div id="rotate">Поверните телефон горизонтально</div>
 
 <!-- Порядок важен: без ES-модулей, общий namespace GAME -->
 <script src="js/config.js"></script>

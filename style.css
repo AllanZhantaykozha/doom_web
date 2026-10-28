@@ -22,13 +22,15 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;   /* центрирование — через auto-поля ниже: при переполнении верх остаётся доступным для прокрутки */
   background: rgba(0, 0, 0, 0.72);
   text-align: center;
   user-select: none;
   overflow: auto;
 }
 #overlay[hidden] { display: none; }
+#overlay > :first-child { margin-top: auto; }
+#overlay > :last-child { margin-bottom: auto; }
 #overlay h1 { font-size: 48px; letter-spacing: 8px; margin: 0 0 14px; color: #c33; }
 #overlay .sub { font-size: 16px; color: #999; margin: 0 0 24px; }
 #overlay button {
@@ -113,3 +115,73 @@ html, body {
 #endscreen td { padding: 4px 18px; text-align: right; }
 #endscreen td:first-child { text-align: left; color: #aaa; }
 #endscreen .hint { font-size: 15px; color: #999; margin: 0; }
+
+/* ---------- Сенсорное управление ---------- */
+html, body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+#screen { height: 100dvh; }
+body.touch { touch-action: none; }
+body.touch #overlay { touch-action: pan-y; }
+
+#touch { display: none; position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+body.touch.playing #touch { display: block; }
+#touch .zone { position: absolute; top: 0; bottom: 0; pointer-events: auto; touch-action: none; }
+#tz-move { left: 0; width: 42%; }
+#tz-look { right: 0; width: 58%; }
+
+#t-base, #t-knob {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+#t-base { width: 116px; height: 116px; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(255, 255, 255, 0.08); }
+#t-knob { width: 52px; height: 52px; background: rgba(255, 255, 255, 0.4); border: 2px solid rgba(255, 255, 255, 0.6); }
+#t-base[hidden], #t-knob[hidden] { display: none; }
+
+#touch .btn {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  background: rgba(30, 30, 30, 0.45);
+  color: rgba(255, 255, 255, 0.85);
+  font: bold 14px "Courier New", monospace;
+  padding: 0;
+}
+#touch .btn.on { background: rgba(200, 50, 50, 0.6); border-color: #fff; }
+#touch .btn.small { width: 44px; height: 44px; font-size: 13px; border-radius: 10px; }
+#t-fire { right: calc(4vw + env(safe-area-inset-right)); bottom: calc(17dvh + 6px); width: 92px; height: 92px; font-size: 15px; background: rgba(160, 30, 30, 0.45); }
+#t-use { right: calc(4vw + 108px + env(safe-area-inset-right)); bottom: calc(17dvh + 6px); width: 64px; height: 64px; font-size: 20px; }
+#t-prev { right: calc(4vw + 52px + env(safe-area-inset-right)); top: 10px; }
+#t-next { right: calc(4vw + env(safe-area-inset-right)); top: 10px; }
+#t-map { right: calc(4vw + 104px + env(safe-area-inset-right)); top: 10px; width: 64px; font-size: 11px; }
+#t-pause { left: calc(10px + env(safe-area-inset-left)); top: 10px; }
+
+#rotate {
+  display: none;
+  position: fixed; left: 0; right: 0; top: 0;
+  padding: 8px; text-align: center; font-size: 14px;
+  background: rgba(160, 30, 30, 0.85); color: #fff; z-index: 6; pointer-events: none;
+}
+@media (orientation: portrait) {
+  body.touch.playing #rotate { display: block; }
+}
+
+/* Низкие экраны (телефон в альбомной ориентации): компактное меню */
+@media (max-height: 480px) {
+  #overlay h1 { font-size: 30px; letter-spacing: 4px; margin-bottom: 6px; }
+  #overlay .sub { margin-bottom: 8px; font-size: 13px; }
+  #overlay button { padding: 6px 10px; font-size: 16px; margin: 3px 0; }
+  #overlay .keys { margin-top: 8px; font-size: 11px; line-height: 1.4; }
+  #overlay .row { padding: 2px 0; font-size: 14px; }
+  #endscreen h1 { font-size: 30px; }
+  #endscreen h2 { margin-bottom: 8px; }
+  #endscreen table { font-size: 16px; margin-bottom: 10px; }
+}

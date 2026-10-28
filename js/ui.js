@@ -19,6 +19,10 @@
     'Ctrl / ЛКМ — огонь · 1–5 / колесо — оружие · E / Пробел — открыть<br>' +
     'Tab — карта · Esc — пауза · F5 / F9 — быстрое сохранение / загрузка · F3 — отладка';
 
+  const TOUCH_HELP =
+    'Левая половина экрана — джойстик (до упора — бег) · правая — поворот свайпом<br>' +
+    'Кнопки: огонь, «E» — открыть, ◀ ▶ — оружие, карта, пауза';
+
   G.UI = {
     menuEl: null, endEl: null,
     view: 'main', prev: 'main',
@@ -86,7 +90,7 @@
         default:
           return '<h1>IRONHOLLOW</h1><p class="sub">Три уровня · пять видов оружия · один босс</p>' +
             btn('new', 'Новая игра') + btn('load', 'Загрузить игру', !hasSave) + btn('settings', 'Настройки') +
-            '<p class="keys">' + KEYS_HELP + '</p>';
+            '<p class="keys">' + (document.body.classList.contains('touch') ? TOUCH_HELP : KEYS_HELP) + '</p>';
       }
     },
 

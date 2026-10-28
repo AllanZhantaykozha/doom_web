@@ -107,6 +107,7 @@
       this.hurtFlash = Math.min(1, this.hurtFlash + amount / 40);
       if (this.painCool <= 0) { G.Audio.play('pain'); this.painCool = 0.3; }
       this.painTimer = amount >= 20 ? 0.6 : 0.3;
+      if (G.Input.touch && navigator.vibrate) navigator.vibrate(Math.min(80, 20 + amount));   // отклик на телефоне
       // Лицо смотрит на источник: знак угла между взглядом и направлением на источник
       let rel = Math.atan2(srcY - this.y, srcX - this.x) - this.angle;
       rel = Math.atan2(Math.sin(rel), Math.cos(rel));
@@ -275,7 +276,7 @@
 
       // Выбор оружия 1–5
       for (let i = 0; i < 5; i++) if (In.wasPressed('Digit' + (i + 1))) this.selectWeapon(i);
-      const trigger = In.isDown('ControlLeft') || In.isDown('ControlRight') || In.mouseDown || In.padFire;
+      const trigger = In.isDown('ControlLeft') || In.isDown('ControlRight') || In.mouseDown || In.padFire || In.touchFire;
       this.updateWeapon(dt, trigger);
 
       // Поворот стрелками / правым стиком
@@ -291,11 +292,11 @@
       if (In.isDown('KeyS')) fwd -= 1;
       if (In.isDown('KeyD')) str += 1;
       if (In.isDown('KeyA')) str -= 1;
-      fwd += In.padMoveY;
-      str += In.padMoveX;
+      fwd += In.padMoveY + In.touchY;
+      str += In.padMoveX + In.touchX;
 
       const len = Math.hypot(fwd, str);
-      const run = In.isDown('ShiftLeft') || In.isDown('ShiftRight') || In.padRun;
+      const run = In.isDown('ShiftLeft') || In.isDown('ShiftRight') || In.padRun || In.touchRun;
       const M = G.Map, E = G.Enemies, r = P.radius;
 
       let dx = 0, dy = 0;

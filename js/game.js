@@ -24,6 +24,7 @@
     msgTimer: 0,
     statusKey: -1,
     pausedAt: 0,
+    wasPlaying: false,
     // Статистика для оверлея отладки и счётчика FPS
     frameMs: 0, fps: 0, fpsFrames: 0, fpsTime: 0,
 
@@ -162,6 +163,7 @@
       G.Input.down.clear();
       G.UI.hideMenu();
       G.Input.requestLock();
+      if (G.Input.touch) G.Input.enterFullscreen();
       this.syncMusic();
     },
 
@@ -389,6 +391,14 @@
           this.bossTimer -= dt;
           if (this.bossTimer <= 0) this.showScreen('victory');
         }
+      }
+
+      // Сенсорная панель видна только во время игры; при скрытии сбрасываем зажатые пальцы
+      const playing = this.state === 'running';
+      if (playing !== this.wasPlaying) {
+        this.wasPlaying = playing;
+        document.body.classList.toggle('playing', playing);
+        if (!playing) G.Input.touchReset();
       }
 
       G.Renderer.render(G.Player.x, G.Player.y, G.Player.angle);

@@ -98,7 +98,8 @@
     PICKUP_RADIUS: 0.5,
     USE_REACH: 1.5,
 
-    GAMEPAD_DEADZONE: 0.2
+    GAMEPAD_DEADZONE: 0.2,
+    TOUCH_LOOK: 1.8              // множитель поворота свайпом относительно мыши
   };
 
   // ---------- Настройки пользователя (localStorage) ----------
